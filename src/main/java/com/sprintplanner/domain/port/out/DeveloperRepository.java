@@ -15,4 +15,6 @@ public interface DeveloperRepository {
     Optional<Developer> findById(UUID developerId);
 
     List<Developer> findByTeamId(UUID teamId);
+
+    boolean deleteByIdAndTeamId(UUID developerId, UUID teamId);
 }

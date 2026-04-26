@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class TeamService {
@@ -37,6 +38,10 @@ public class TeamService {
             .orElseThrow(() -> new IllegalArgumentException("Team not found: " + teamId));
     }
 
+    public List<Team> getTeams() {
+        return teamRepository.findAll();
+    }
+
     public Developer addDeveloper(UUID teamId, String name, String role, int baseVelocity) {
         Team team = getTeam(teamId);
         Developer developer = new Developer(UUID.randomUUID(), team.getId(), name, role, baseVelocity);
@@ -45,5 +50,15 @@ public class TeamService {
 
     public List<Developer> getDevelopers(UUID teamId) {
         return developerRepository.findByTeamId(teamId);
+    }
+
+    @Transactional
+    public void removeDeveloper(UUID teamId, UUID developerId) {
+        boolean deleted = developerRepository.deleteByIdAndTeamId(developerId, teamId);
+        if (!deleted) {
+            throw new IllegalArgumentException(
+                "Developer not found for team. teamId=" + teamId + ", developerId=" + developerId
+            );
+        }
     }
 }

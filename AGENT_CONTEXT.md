@@ -290,6 +290,11 @@ STEP 12 — REST controllers + DTOs (web layer)
           SprintPlannerController, TeamController, ReviewController
           Test full HTTP flow with stubs still active
 
+STEP 12.5 — Demo refresh-safety and team endpoint parity
+            Backend: add GET /api/teams and DELETE /api/teams/{teamId}/developers/{developerId}
+            Frontend: persist sprint plan to localStorage and recover plan on Review/Close refresh
+            Tests: add TeamController integration coverage for create/list/add/remove developer flow
+
 STEP 13 — ConsolePlanPublisher + CliRunner
           Test CLI entry point with file input
 
@@ -345,6 +350,7 @@ When prompting your AI agent to generate code, always follow these rules:
 | A — E-Commerce | 6 devs (2 FE, 2 BE, 1 mobile, 1 QA) | E_COMMERCE | Normal happy path, mobile task routing |
 | B — Fintech | 4 devs (3 BE, 1 QA) | FINTECH | Strict acceptance criteria, conservative estimates |
 | C — Vague epics | 5 devs (mixed) | GENERIC | Graceful degradation on ambiguous input |
+| D — Browser refresh recovery | Existing sprint plan | Any domain | Review/Close page refresh should preserve plan data |
 
 ---
 

@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface DeveloperJpaRepository extends JpaRepository<Developer, UUID> {
 
     List<Developer> findByTeamId(UUID teamId);
+
+    long deleteByIdAndTeamId(UUID id, UUID teamId);
 }

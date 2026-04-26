@@ -2,6 +2,7 @@ package com.sprintplanner.infrastructure.persistence;
 
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.port.out.TeamRepository;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Repository;
@@ -23,5 +24,10 @@ public class JpaTeamRepository implements TeamRepository {
     @Override
     public Optional<Team> findById(UUID teamId) {
         return teamJpaRepository.findById(teamId);
+    }
+
+    @Override
+    public List<Team> findAll() {
+        return teamJpaRepository.findAll();
     }
 }

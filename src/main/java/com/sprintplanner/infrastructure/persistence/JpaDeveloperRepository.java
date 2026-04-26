@@ -30,4 +30,9 @@ public class JpaDeveloperRepository implements DeveloperRepository {
     public List<Developer> findByTeamId(UUID teamId) {
         return developerJpaRepository.findByTeamId(teamId);
     }
+
+    @Override
+    public boolean deleteByIdAndTeamId(UUID developerId, UUID teamId) {
+        return developerJpaRepository.deleteByIdAndTeamId(developerId, teamId) > 0;
+    }
 }
