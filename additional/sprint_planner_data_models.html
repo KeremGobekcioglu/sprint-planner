@@ -1,0 +1,121 @@
+<div id="erd"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '13px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+  },
+});
+const { svg } = await mermaid.render('erd-svg', `erDiagram
+  Team {
+    UUID id PK
+    string name
+    string domain
+    int sprint_length_days
+    string trello_board_id
+    timestamp created_at
+  }
+  Developer {
+    UUID id PK
+    UUID team_id FK
+    string name
+    string role
+    int base_velocity
+  }
+  Sprint {
+    UUID id PK
+    UUID team_id FK
+    int sprint_number
+    string goal
+    string domain_override
+    string status
+    timestamp planned_at
+    timestamp reviewed_at
+  }
+  UserStory {
+    UUID id PK
+    UUID sprint_id FK
+    string epic_title
+    string title
+    int story_points
+    string status
+  }
+  Task {
+    UUID id PK
+    UUID story_id FK
+    UUID assigned_dev_id FK
+    string title
+    string description
+    string acceptance_criterion
+    string role_tag
+    int story_points
+    string status
+    string trello_card_id
+  }
+  SprintReview {
+    UUID id PK
+    UUID sprint_id FK
+    string goal_result
+    string blocker_note
+    int total_planned_pts
+    int total_completed_pts
+    timestamp submitted_at
+  }
+  DevCompletion {
+    UUID id PK
+    UUID review_id FK
+    UUID developer_id FK
+    int planned_pts
+    int completed_pts
+  }
+  EditLog {
+    UUID id PK
+    UUID sprint_id FK
+    string field
+    string original_value
+    string new_value
+    string task_type
+    timestamp logged_at
+  }
+  Team ||--o{ Developer : has
+  Team ||--o{ Sprint : runs
+  Sprint ||--o{ UserStory : contains
+  UserStory ||--o{ Task : breaks_into
+  Developer ||--o{ Task : assigned
+  Sprint ||--o| SprintReview : closed_by
+  SprintReview ||--o{ DevCompletion : records
+  Sprint ||--o{ EditLog : tracks
+`);
+document.getElementById('erd').innerHTML = svg;
+document.querySelectorAll('#erd svg .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+document.querySelectorAll('#erd svg .row-rect-odd path, #erd svg .row-rect-even path').forEach(p => {
+  p.setAttribute('stroke', 'none');
+});
+</script>
