@@ -13,7 +13,7 @@ export function EpicInput<TFieldValues extends FieldValues>({ control, name }: E
       rules={{ required: true }}
       render={({ field }) => (
         <textarea
-          className="h-40 w-full rounded-xl border border-ink/20 px-3 py-2 text-sm"
+          className="h-40 w-full rounded-xl border border-slate-500/40 px-3 py-2 text-sm"
           placeholder="One epic per line, format: Title | Description"
           {...field}
         />

@@ -3,14 +3,48 @@
 @tailwind utilities;
 
 :root {
-  color: #111827;
-  background: radial-gradient(circle at 20% 20%, #fef9e7 0%, #f4efe3 38%, #e6efe8 100%);
+  color: #e5e7eb;
+  background:
+    radial-gradient(1100px 620px at 8% -12%, #334155 0%, transparent 58%),
+    radial-gradient(950px 540px at 100% -8%, #2b3543 0%, transparent 54%),
+    radial-gradient(900px 500px at 50% 110%, #1f2937 0%, transparent 60%),
+    linear-gradient(180deg, #0c1118 0%, #070b10 100%);
   font-family: 'Archivo', sans-serif;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+input,
+select,
+textarea {
+  background: rgba(17, 24, 39, 0.55);
+  border-color: rgba(148, 163, 184, 0.28);
+  color: #e5e7eb;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(203, 213, 225, 0.72);
+}
+
+button {
+  transition: transform 160ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+button:hover {
+  filter: brightness(1.04);
+}
+
+button:active {
+  transform: translateY(1px);
 }
 
 h1,

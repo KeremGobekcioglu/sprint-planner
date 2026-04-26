@@ -40,8 +40,8 @@ export function TeamSetupPage() {
   return (
     <PageLayout title="Teams" subtitle="Create your team, tune capacity and move into sprint planning.">
       <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <article className="space-y-4 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur">
-          <h2 className="text-xl font-semibold text-ink">Create Team</h2>
+        <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
+          <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
           <form
             className="grid gap-3 sm:grid-cols-2"
             onSubmit={teamForm.handleSubmit((values) => {
@@ -54,27 +54,27 @@ export function TeamSetupPage() {
             })}
           >
             <input
-              className="rounded-lg border border-ink/20 px-3 py-2"
+              className="rounded-lg border border-slate-500/40 px-3 py-2"
               placeholder="Team Name"
               {...teamForm.register('name', { required: true })}
             />
-            <select className="rounded-lg border border-ink/20 px-3 py-2" {...teamForm.register('domain')}>
+            <select className="rounded-lg border border-slate-500/40 px-3 py-2" {...teamForm.register('domain')}>
               <option value="E_COMMERCE">E-Commerce</option>
               <option value="FINTECH">Fintech</option>
               <option value="GENERIC">Generic</option>
             </select>
             <input
-              className="rounded-lg border border-ink/20 px-3 py-2"
+              className="rounded-lg border border-slate-500/40 px-3 py-2"
               type="number"
               min={7}
               {...teamForm.register('sprintLengthDays', { valueAsNumber: true, min: 7 })}
             />
             <input
-              className="rounded-lg border border-ink/20 px-3 py-2"
+              className="rounded-lg border border-slate-500/40 px-3 py-2"
               placeholder="Trello board (optional)"
               {...teamForm.register('trelloBoardId')}
             />
-            <button className="rounded-lg bg-ember px-4 py-2 font-semibold text-white sm:col-span-2">
+            <button className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 shadow-lg shadow-emerald-900/30 sm:col-span-2">
               {createTeamMutation.isPending ? 'Creating...' : 'Create Team'}
             </button>
           </form>
@@ -88,13 +88,13 @@ export function TeamSetupPage() {
                 key={team.id}
                 className={`rounded-xl border p-4 text-left transition ${
                   selectedTeamId === team.id
-                    ? 'border-ember bg-amber-50'
-                    : 'border-ink/10 bg-white hover:border-ink/25 hover:bg-white/60'
+                    ? 'border-emerald-300/60 bg-emerald-400/12'
+                    : 'border-white/10 bg-slate-950/45 hover:border-slate-300/30 hover:bg-slate-900/55'
                 }`}
                 onClick={() => setSelectedTeamId(team.id)}
               >
-                <p className="font-semibold text-ink">{team.name}</p>
-                <p className="text-xs text-ink/70">
+                <p className="font-semibold text-slate-100">{team.name}</p>
+                <p className="text-xs text-slate-300">
                   {team.domain} • {team.sprintLengthDays} days
                 </p>
               </button>
@@ -102,11 +102,11 @@ export function TeamSetupPage() {
           </div>
         </article>
 
-        <article className="space-y-4 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card backdrop-blur">
+        <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-ink">Developers</h2>
+            <h2 className="text-xl font-semibold text-slate-100">Developers</h2>
             <button
-              className="rounded-lg bg-ink px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-slate-200/90 px-3 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50"
               disabled={!selectedTeam}
               onClick={() => {
                 if (!selectedTeam) return;
@@ -118,7 +118,7 @@ export function TeamSetupPage() {
             </button>
           </div>
 
-          {!selectedTeam ? <p className="text-sm text-ink/70">Select a team to manage developers.</p> : null}
+          {!selectedTeam ? <p className="text-sm text-slate-300/85">Select a team to manage developers.</p> : null}
 
           {selectedTeam ? (
             <>
@@ -134,15 +134,18 @@ export function TeamSetupPage() {
 
               <div className="space-y-2">
                 {developersQuery.data?.map((developer) => (
-                  <div key={developer.id} className="flex items-center justify-between rounded-lg border border-ink/10 p-3">
+                  <div
+                    key={developer.id}
+                    className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/45 p-3"
+                  >
                     <div>
-                      <p className="font-medium text-ink">{developer.name}</p>
-                      <p className="text-xs uppercase tracking-wide text-ink/60">
+                      <p className="font-medium text-slate-100">{developer.name}</p>
+                      <p className="text-xs uppercase tracking-wide text-slate-300">
                         {developer.role} • Velocity {developer.baseVelocity}
                       </p>
                     </div>
                     <button
-                      className="rounded-md border border-red-300 px-3 py-1 text-sm text-red-700"
+                      className="rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200"
                       onClick={() =>
                         removeDeveloperMutation.mutate({ teamId: selectedTeam.id, developerId: developer.id })
                       }

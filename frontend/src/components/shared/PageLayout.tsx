@@ -10,11 +10,11 @@ export function PageLayout({ title, subtitle, actions, children }: PageLayoutPro
   return (
     <div className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="mb-6 rounded-3xl border border-black/10 bg-white/80 p-6 shadow-card backdrop-blur">
+        <header className="mb-6 rounded-3xl border border-white/10 bg-slate-900/55 p-6 shadow-card backdrop-blur-xl">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-ink">{title}</h1>
-              {subtitle ? <p className="mt-2 text-sm text-ink/70">{subtitle}</p> : null}
+              <h1 className="text-3xl font-bold text-slate-100">{title}</h1>
+              {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
             </div>
             {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
           </div>

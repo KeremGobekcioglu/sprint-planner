@@ -23,30 +23,30 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
 
   return (
     <form
-      className="grid gap-3 rounded-2xl border border-ink/10 bg-white p-4 sm:grid-cols-4"
+      className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
       onSubmit={handleSubmit((values) => {
         onSubmit(values);
         reset();
       })}
     >
       <input
-        className="rounded-lg border border-ink/20 px-3 py-2 text-sm"
+        className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
         placeholder="Developer name"
         {...register('name', { required: true })}
       />
-      <select className="rounded-lg border border-ink/20 px-3 py-2 text-sm" {...register('role', { required: true })}>
+      <select className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm" {...register('role', { required: true })}>
         <option value="backend">Backend</option>
         <option value="frontend">Frontend</option>
         <option value="qa">QA</option>
         <option value="devops">DevOps</option>
       </select>
       <input
-        className="rounded-lg border border-ink/20 px-3 py-2 text-sm"
+        className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
         type="number"
         min={1}
         {...register('baseVelocity', { valueAsNumber: true, min: 1 })}
       />
-      <button className="rounded-lg bg-pine px-4 py-2 text-sm font-semibold text-white" disabled={isSubmitting}>
+      <button className="rounded-lg bg-emerald-500/85 px-4 py-2 text-sm font-semibold text-slate-950" disabled={isSubmitting}>
         {isSubmitting ? 'Adding...' : 'Add developer'}
       </button>
     </form>

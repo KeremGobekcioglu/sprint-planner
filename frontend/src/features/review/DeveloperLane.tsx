@@ -16,7 +16,7 @@ export function DeveloperLane({ developerId, tasks, capacity, onDropTask, onEdit
 
   return (
     <section
-      className="space-y-3 rounded-2xl border border-ink/10 bg-white/70 p-4"
+      className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -27,7 +27,7 @@ export function DeveloperLane({ developerId, tasks, capacity, onDropTask, onEdit
       }}
     >
       <header className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-ink">{developerId}</h3>
+        <h3 className="text-base font-semibold text-slate-100">{developerId}</h3>
         <p className={`text-xs font-bold ${indicator}`}>
           {points}/{capacity} pts
         </p>

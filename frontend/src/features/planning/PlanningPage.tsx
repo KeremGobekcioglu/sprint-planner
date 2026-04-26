@@ -53,7 +53,7 @@ export function PlanningPage() {
 
   return (
     <PageLayout title="Planning" subtitle="Feed epics and constraints, then generate a sprint plan draft.">
-      <section className="grid gap-6 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card">
+      <section className="grid gap-6 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         <form
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => {
@@ -93,34 +93,34 @@ export function PlanningPage() {
           })}
         >
           <div>
-            <p className="mb-1 text-sm font-semibold text-ink">Epics</p>
+            <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
             <EpicInput control={form.control} name="epicsText" />
           </div>
 
           <div>
-            <p className="mb-1 text-sm font-semibold text-ink">Domain</p>
+            <p className="mb-1 text-sm font-semibold text-slate-100">Domain</p>
             <DomainSelector value={form.watch('domain')} onChange={(domain) => form.setValue('domain', domain)} />
           </div>
 
           <div>
-            <p className="mb-1 text-sm font-semibold text-ink">Sprint Goal</p>
+            <p className="mb-1 text-sm font-semibold text-slate-100">Sprint Goal</p>
             <input
-              className="w-full rounded-lg border border-ink/20 px-3 py-2"
+              className="w-full rounded-lg border border-slate-500/40 px-3 py-2"
               placeholder="What does success look like?"
               {...form.register('sprintGoal', { required: true })}
             />
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-ink">Days Off by Developer</p>
+            <p className="text-sm font-semibold text-slate-100">Days Off by Developer</p>
             {developersQuery.isLoading ? <LoadingSpinner label="Loading developers..." /> : null}
             {developersQuery.isError ? <ErrorBanner message="Could not load developers for days-off input." /> : null}
             {developers.map((developer) => (
-              <label key={developer.id} className="flex items-center justify-between gap-4 rounded-lg border border-ink/10 p-3">
-                <span className="text-sm font-medium text-ink">{developer.name}</span>
+              <label key={developer.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-slate-950/30 p-3">
+                <span className="text-sm font-medium text-slate-100">{developer.name}</span>
                 <input
                   type="number"
-                  className="w-24 rounded-lg border border-ink/20 px-2 py-1"
+                  className="w-24 rounded-lg border border-slate-500/40 px-2 py-1"
                   min={0}
                   {...form.register(`daysOff.${developer.id}` as const, {
                     valueAsNumber: true,
@@ -131,7 +131,7 @@ export function PlanningPage() {
             ))}
           </div>
 
-          <button className="rounded-lg bg-ember px-4 py-2 font-semibold text-white" disabled={planMutation.isPending}>
+          <button className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950" disabled={planMutation.isPending}>
             {planMutation.isPending ? 'Generating...' : 'Generate Plan'}
           </button>
         </form>

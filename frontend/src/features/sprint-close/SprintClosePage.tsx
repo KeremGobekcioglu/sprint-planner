@@ -65,7 +65,7 @@ export function SprintClosePage() {
 
   return (
     <PageLayout title="Sprint Close" subtitle="Capture completion and goal outcome to close the sprint.">
-      <section className="space-y-4 rounded-3xl border border-ink/10 bg-white/80 p-5 shadow-card">
+      <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         {planQuery.isLoading ? <LoadingSpinner label="Loading sprint tasks..." /> : null}
         {planQuery.isError ? <ErrorBanner message="Could not load sprint tasks for closeout." /> : null}
 
@@ -105,7 +105,7 @@ export function SprintClosePage() {
             ) : null}
 
             <div>
-              <p className="mb-2 text-sm font-semibold text-ink">Task completion</p>
+              <p className="mb-2 text-sm font-semibold text-slate-100">Task completion</p>
               <div className="space-y-2">
                 {tasks.map((task) => (
                   <TaskCompletionToggle
@@ -130,7 +130,7 @@ export function SprintClosePage() {
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-semibold text-ink">Sprint goal result</p>
+              <p className="mb-2 text-sm font-semibold text-slate-100">Sprint goal result</p>
               <select className="w-full rounded-lg border border-ink/20 px-3 py-2" {...form.register('goalResult')}>
                 <option value="YES">Yes</option>
                 <option value="PARTIALLY">Partially</option>
@@ -139,7 +139,7 @@ export function SprintClosePage() {
             </div>
 
             <div>
-              <p className="mb-2 text-sm font-semibold text-ink">Blocker note (optional)</p>
+              <p className="mb-2 text-sm font-semibold text-slate-100">Blocker note (optional)</p>
               <textarea
                 className="h-24 w-full rounded-lg border border-ink/20 px-3 py-2"
                 {...form.register('blockerNote')}

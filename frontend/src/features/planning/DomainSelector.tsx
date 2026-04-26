@@ -17,7 +17,7 @@ export function DomainSelector({ value, onChange }: DomainSelectorProps) {
           key={domain.key}
           type="button"
           className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-            value === domain.key ? 'border-ember bg-amber-50 text-ink' : 'border-ink/20 bg-white text-ink/70'
+            value === domain.key ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-200' : 'border-slate-500/40 bg-slate-950/60 text-slate-300'
           }`}
           onClick={() => onChange(domain.key as TeamDomain)}
         >

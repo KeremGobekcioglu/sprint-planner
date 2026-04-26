@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { approvePlan } from '../../api/sprintApi';
+import { approvePlan, getSprintPlan } from '../../api/sprintApi';
 import { logEdit, type EditPayload } from '../../api/reviewApi';
 import type { SprintPlan } from '../../types/planning';
 
@@ -8,7 +8,16 @@ export function useReview(sprintId: string | undefined) {
 
   const planQuery = useQuery<SprintPlan | undefined>({
     queryKey: ['sprint', sprintId],
-    queryFn: async () => queryClient.getQueryData<SprintPlan>(['sprint', sprintId]),
+    queryFn: async () => {
+      const cachedPlan = queryClient.getQueryData<SprintPlan>(['sprint', sprintId]);
+      if (cachedPlan) {
+        return cachedPlan;
+      }
+      if (!sprintId) {
+        return undefined;
+      }
+      return getSprintPlan(sprintId);
+    },
     enabled: Boolean(sprintId),
     staleTime: Infinity,
     retry: false,

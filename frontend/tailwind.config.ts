@@ -12,7 +12,7 @@ const config: Config = {
         mist: '#d8e2e9'
       },
       boxShadow: {
-        card: '0 16px 40px -20px rgba(17, 24, 39, 0.35)'
+        card: '0 18px 46px -18px rgba(2, 6, 23, 0.7), 0 10px 24px -16px rgba(51, 65, 85, 0.55)'
       }
     },
   },

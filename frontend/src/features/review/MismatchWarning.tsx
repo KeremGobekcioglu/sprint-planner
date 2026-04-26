@@ -14,11 +14,11 @@ export function MismatchWarning({ warning, dismissed, onDismiss }: MismatchWarni
       }`}
     >
       <div>
-        <p className="text-xs font-bold uppercase tracking-wide text-ink/60">{warning.type}</p>
-        <p className="text-sm text-ink">{warning.message}</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-300">{warning.type}</p>
+        <p className="text-sm text-slate-100">{warning.message}</p>
       </div>
       <button
-        className="rounded-md border border-ink/20 px-2 py-1 text-xs font-semibold"
+        className="rounded-md border border-slate-500/40 bg-slate-800/50 px-2 py-1 text-xs font-semibold text-slate-200"
         onClick={() => onDismiss(warning.type)}
       >
         {dismissed ? 'Acknowledged' : 'Acknowledge'}
