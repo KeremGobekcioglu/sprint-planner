@@ -11,7 +11,3 @@ Instead of hiding what it assumed, the system shows it:
 - Frontend-only change, no backend involved
 - No auth changes required
 PM can correct wrong assumptions directly. Those corrections feed preference memory.
-
-Which one is actually worth building?
-Option 1 (clarification step) is the most impactful and also the easiest to demo. One extra screen before the plan generates. Professors will love it because it shows the system knows its own limits.
-Option 2 + 3 are lower effort to implement — just prompt engineering + a flag in the output schema — and they make the Review Screen much more meaningful.
