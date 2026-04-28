@@ -3,6 +3,7 @@ import { TaskCard } from './TaskCard';
 
 interface DeveloperLaneProps {
   developerId: string;
+  developerLabel: string;
   tasks: Task[];
   capacity: number;
   onDropTask: (taskId: string, developerId: string) => void;
@@ -10,7 +11,7 @@ interface DeveloperLaneProps {
   onDefer: (taskId: string) => void;
 }
 
-export function DeveloperLane({ developerId, tasks, capacity, onDropTask, onEdit, onDefer }: DeveloperLaneProps) {
+export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer }: DeveloperLaneProps) {
   const points = tasks.reduce((sum, task) => sum + task.storyPoints, 0);
   const indicator = points > capacity ? 'text-red-700' : points > capacity * 0.8 ? 'text-amber-700' : 'text-pine';
 
@@ -27,7 +28,7 @@ export function DeveloperLane({ developerId, tasks, capacity, onDropTask, onEdit
       }}
     >
       <header className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-100">{developerId}</h3>
+        <h3 className="text-base font-semibold text-slate-100">{developerLabel}</h3>
         <p className={`text-xs font-bold ${indicator}`}>
           {points}/{capacity} pts
         </p>

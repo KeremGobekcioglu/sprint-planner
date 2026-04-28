@@ -157,53 +157,27 @@ function createMockDeveloper(teamId: string, payload: DeveloperCreateRequest): D
 
 export const getTeams = () =>
   USE_REAL_API
-    ? api
-        .get<Team[]>('/api/teams')
-        .then((response) => response.data)
-        .catch((error: unknown) => {
-          console.warn('Team list endpoint is unavailable in backend Step 12. Falling back to mock teams.', error);
-          return getMockTeams();
-        })
+    ? api.get<Team[]>('/api/teams').then((response) => response.data)
     : Promise.resolve(getMockTeams());
 
 export const createTeam = (team: TeamCreateRequest) =>
   USE_REAL_API
-    ? api.post<Team>('/api/teams', team).then((response) => response.data).catch((error: unknown) => {
-        console.warn('Create team endpoint is unavailable in backend Step 12. Falling back to mock team creation.', error);
-        return createMockTeam(team);
-      })
+    ? api.post<Team>('/api/teams', team).then((response) => response.data)
     : Promise.resolve(createMockTeam(team));
 
 export const getDevelopers = (teamId: string) =>
   USE_REAL_API
-    ? api
-        .get<Developer[]>(`/api/teams/${teamId}/developers`)
-        .then((response) => response.data)
-        .catch((error: unknown) => {
-          console.warn('Developer list endpoint is unavailable in backend Step 12. Falling back to mock developers.', error);
-          return getMockDevelopers().filter((developer) => developer.teamId === teamId);
-        })
+    ? api.get<Developer[]>(`/api/teams/${teamId}/developers`).then((response) => response.data)
     : Promise.resolve(getMockDevelopers().filter((developer) => developer.teamId === teamId));
 
 export const createDeveloper = (teamId: string, developer: DeveloperCreateRequest) =>
   USE_REAL_API
-    ? api.post<Developer>(`/api/teams/${teamId}/developers`, developer).then((response) => response.data).catch((error: unknown) => {
-        console.warn('Create developer endpoint is unavailable in backend Step 12. Falling back to mock developer creation.', error);
-        return createMockDeveloper(teamId, developer);
-      })
+    ? api.post<Developer>(`/api/teams/${teamId}/developers`, developer).then((response) => response.data)
     : Promise.resolve(createMockDeveloper(teamId, developer));
 
 export const removeDeveloper = (teamId: string, developerId: string) =>
   USE_REAL_API
-    ? api
-        .delete(`/api/teams/${teamId}/developers/${developerId}`)
-        .then((response) => response.data)
-        .catch((error: unknown) => {
-          console.warn('Remove developer endpoint is unavailable in backend Step 12. Falling back to mock removal.', error);
-          const nextDevelopers = getMockDevelopers().filter((developer) => developer.id !== developerId);
-          setMockDevelopers(nextDevelopers);
-          return { status: 'SKIPPED_BACKEND_STEP_12', teamId, developerId };
-        })
+    ? api.delete(`/api/teams/${teamId}/developers/${developerId}`).then((response) => response.data)
     : Promise.resolve().then(() => {
         const nextDevelopers = getMockDevelopers().filter((developer) => developer.id !== developerId);
         setMockDevelopers(nextDevelopers);

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getDevelopers } from '../../api/teamApi';
 import { approvePlan, getSprintPlan } from '../../api/sprintApi';
 import { logEdit, type EditPayload } from '../../api/reviewApi';
 import type { SprintPlan } from '../../types/planning';
@@ -30,6 +31,16 @@ export function useReview(sprintId: string | undefined) {
     },
   });
 
+  const teamId = planQuery.data?.teamId;
+
+  const developersQuery = useQuery({
+    queryKey: ['developers', teamId],
+    queryFn: () => getDevelopers(teamId as string),
+    enabled: Boolean(teamId),
+    staleTime: Infinity,
+    retry: false,
+  });
+
   const logEditMutation = useMutation({
     mutationFn: ({ id, edit }: { id: string; edit: EditPayload }) => logEdit(id, edit),
     onError: (error) => {
@@ -39,6 +50,7 @@ export function useReview(sprintId: string | undefined) {
 
   return {
     planQuery,
+    developersQuery,
     approveMutation,
     logEditMutation,
   };

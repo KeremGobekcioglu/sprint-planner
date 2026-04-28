@@ -13,11 +13,16 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, deferTask, addEdit, reset } = useReviewStore();
-  const { planQuery, approveMutation, logEditMutation } = useReview(sprintId);
+  const { planQuery, developersQuery, approveMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
 
   const stories = planQuery.data?.stories ?? [];
   const warnings = planQuery.data?.warnings ?? [];
+  const developerLabels = useMemo(() => {
+    return new Map(
+      (developersQuery.data ?? []).map((developer) => [developer.id, `${developer.name} • ${developer.role}`]),
+    );
+  }, [developersQuery.data]);
 
   const allTasks = useMemo(() => stories.flatMap((story) => story.tasks), [stories]);
 
@@ -79,6 +84,7 @@ export function ReviewPage() {
             <DeveloperLane
               key={developerId}
               developerId={developerId}
+              developerLabel={developerLabels.get(developerId) ?? (developerId === 'unassigned' ? 'Unassigned' : developerId)}
               tasks={tasks}
               capacity={20}
               onDropTask={(taskId, targetDeveloperId) => {
