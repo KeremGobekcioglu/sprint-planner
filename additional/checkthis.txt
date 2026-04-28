@@ -1,0 +1,87 @@
+You are correct: frontend is currently ahead of backend.
+Here is the full gap audit from the current codebase, ordered by severity so you can continue cleanly next session.
+
+Critical blockers (must fix first)
+
+Review submit endpoint mismatch (hard failure in real mode)
+Frontend posts to /api/reviews in reviewApi.ts:103, but backend only exposes /api/reviews/process in ReviewController.java:32.
+Result: close sprint submit fails unless frontend or backend is aligned.
+
+Sprint id contract is broken in real mode
+Frontend generates fake sprint ids in sprintApi.ts:74, but backend expects UUID path variables in SprintPlannerController.java:82.
+Frontend then requests plan by that id in sprintApi.ts:86.
+Result: refresh/reload paths can break for review/close.
+
+Close sprint does not actually close sprint in backend
+Sprint supports COMPLETED state in Sprint.java:29, but only ACTIVE transition is implemented in SprintPlannerController.java:99.
+Result: no true close lifecycle.
+
+Review data is not persisted to sprint_review/dev_completion tables
+Review controller only forwards data to service in ReviewController.java:43.
+Service only updates memory files in SprintReviewService.java:33.
+Result: DB tables exist but are not used for review history source of truth.
+
+Edit logging contract mismatch can produce invalid writes
+Frontend edit payload has no taskType in reviewApi.ts:4, while backend expects taskType in LogEditHttpRequest.java:10, and DB requires non-null task_type in V1__init.sql:83.
+Result: edit endpoint can fail or store bad semantics.
+
+Preference memory logic is disconnected from actual edit log source
+Review submit sends empty editLogs in reviewApi.ts:100.
+Backend builds team profile from provided list in PreferenceService.java:19, and if empty it writes “no edits” path in PreferenceService.java:31.
+Result: preferences do not learn from real review edits even when /edits endpoint is called.
+
+Major logical inconsistencies
+
+Approve button says Trello push, backend does not publish anything
+UI says “Approve & Push to Trello” in ReviewPage.tsx:61.
+Backend approve only updates sprint status in SprintPlannerController.java:99.
+Only ConsolePlanPublisher exists in ConsolePlanPublisher.java:12.
+Result: product behavior and UI promise are inconsistent.
+
+Review warnings feature is not implemented
+Warnings are hardcoded empty in ReviewPage.tsx:21.
+Result: one of the key product differentiators is missing.
+
+Input validation layer is missing on web DTOs/controllers
+Request DTOs have no bean validation annotations in CreateTeamHttpRequest.java:3, PlanSprintHttpRequest.java:7, SubmitReviewHttpRequest.java:6.
+Result: bad inputs become runtime failures instead of clean 4xx responses.
+
+No exception mapping strategy (client gets unstable error semantics)
+Controllers throw IllegalArgumentException from service/controller paths (example in TeamService.java:59).
+Result: likely 500 responses where 400/404 should be returned.
+
+Status lifecycle is incomplete relative to model
+Model includes PLANNING, IN_REVIEW, ACTIVE, COMPLETED in Sprint.java:29, but flow uses only PLANNING and ACTIVE so far in SprintPlannerController.java:60.
+Result: lifecycle semantics are partially implemented.
+
+Test suite drift and illogical tests
+
+Sprint controller integration test still calls old endpoint path
+Test uses /api/planning/sprints/plan in SprintPlannerControllerIntegrationTest.java:81, but controller is /api/sprints in SprintPlannerController.java:28.
+
+Tests assert that planning/review should not mutate DB, which is now opposite of intended behavior
+Planning test expectation in SprintPlannerControllerIntegrationTest.java:97.
+Review test expectation in ReviewControllerIntegrationTest.java:120.
+Result: tests encode outdated architecture assumptions.
+
+Pre-AI readiness gaps (backend foundation before real AI agents)
+
+Real AI adapters are still stubs
+StubBreakdownAdapter.java:16, StubEstimationAdapter.java:12, StubDistributionAdapter.java:17.
+This is expected for now, but the backend contract and persistence issues above must be fixed first so AI outputs have stable persistence and lifecycle.
+
+Domain comments contradict implementation
+“Pure domain object — no framework annotations” appears alongside @Entity in Sprint.java:22, SprintReview.java:21, EditLog.java:16.
+Result: documentation/intent confusion for future contributors.
+
+Recommended next-session order (backend first, before AI agents)
+
+Fix review endpoint contract alignment (/api/reviews vs /api/reviews/process).
+Fix sprint id contract (backend returns real sprintId, frontend stops synthetic ids in real mode).
+Implement real close sprint backend transition to COMPLETED (+ reviewed/closed timestamp policy).
+Persist SprintReview and DevCompletion to DB; make memory generation read from DB truth.
+Fix edit log payload contract (taskType handling and type-safe value mapping).
+Add controller validation and global exception mapping (400/404/409 consistency).
+Update and repair integration tests to current intended behavior.
+Then proceed to real AI adapters and Trello publisher integration.
+If you want, next time I can turn this list directly into a concrete execution checklist with one commit scope per item.

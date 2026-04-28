@@ -1,6 +1,6 @@
 import api from './axios';
 import { getDevelopers } from './teamApi';
-import type { PlanningRequest, SprintPlan } from '../types/planning';
+import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
@@ -8,19 +8,19 @@ function getSprintPlanStorageKey(sprintId: string) {
   return `sprint-plan:${sprintId}`;
 }
 
-function persistSprintPlan(plan: SprintPlan) {
+function persistSprintPlan(plan: SprintPlan, sprintId: string) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(getSprintPlanStorageKey(plan.sprintId), JSON.stringify(plan));
+  window.localStorage.setItem(getSprintPlanStorageKey(sprintId), JSON.stringify(plan));
 }
 
 async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): Promise<SprintPlan> {
   const developers = await getDevelopers(request.teamId);
   const developerCount = developers.length;
 
-  const stories: SprintPlan['stories'] = request.epics.map((epic, epicIndex) => {
+  const userStories: SprintPlan['userStories'] = request.epics.map((epic, epicIndex) => {
     const taskCount = Math.max(2, Math.min(4, developerCount > 0 ? developerCount : 2));
 
     const tasks = Array.from({ length: taskCount }, (_, taskIndex) => {
@@ -52,45 +52,43 @@ async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): 
     };
   });
 
-  const warnings =
-    request.epics.length === 0
-      ? [
-          {
-            type: 'GOAL' as const,
-            message: 'No epics were supplied, so the sprint plan was created with a placeholder structure.',
-          },
-        ]
-      : [];
-
   const plan: SprintPlan = {
     teamId: request.teamId,
     sprintGoal: request.sprintGoal,
-    sprintId,
-    stories,
-    warnings,
-    totalPoints: stories.reduce((sum, story) => sum + story.storyPoints, 0),
+    userStories,
   };
 
-  persistSprintPlan(plan);
+  persistSprintPlan(plan, sprintId);
   return plan;
 }
 
-export const createSprintPlan = (request: PlanningRequest) => {
+export const createSprintPlan = (request: PlanningRequest): Promise<SprintPlanWithId> => {
   if (!USE_REAL_API) {
-    return buildMockSprintPlan(request, `mock-sprint-${request.teamId}`);
+    const sprintId = `mock-sprint-${request.teamId}`;
+    return buildMockSprintPlan(request, sprintId).then((plan) => ({
+      ...plan,
+      sprintId,
+    }));
   }
 
+  const sprintId = `sprint-${request.teamId}-${Date.now()}`;
   return api.post<SprintPlan>('/api/sprints/plan', request).then((response) => {
-    persistSprintPlan(response.data);
-    return response.data;
+    persistSprintPlan(response.data, sprintId);
+    return {
+      ...response.data,
+      sprintId,
+    };
   });
 };
 
-export const getSprintPlan = (sprintId: string) => {
+export const getSprintPlan = (sprintId: string): Promise<SprintPlanWithId> => {
   if (USE_REAL_API) {
     return api.get<SprintPlan>(`/api/sprints/${sprintId}/plan`).then((response) => {
-      persistSprintPlan(response.data);
-      return response.data;
+      persistSprintPlan(response.data, sprintId);
+      return {
+        ...response.data,
+        sprintId,
+      };
     });
   }
 
@@ -104,7 +102,11 @@ export const getSprintPlan = (sprintId: string) => {
   }
 
   try {
-    return Promise.resolve(JSON.parse(raw) as SprintPlan);
+    const plan = JSON.parse(raw) as SprintPlan;
+    return Promise.resolve({
+      ...plan,
+      sprintId,
+    });
   } catch {
     return Promise.reject(new Error(`Stored sprint plan is invalid JSON for sprintId=${sprintId}`));
   }

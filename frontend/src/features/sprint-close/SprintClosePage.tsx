@@ -27,7 +27,7 @@ export function SprintClosePage() {
     },
   });
 
-  const tasks = useMemo(() => planQuery.data?.stories.flatMap((story) => story.tasks) ?? [], [planQuery.data?.stories]);
+  const tasks = useMemo(() => planQuery.data?.userStories.flatMap((story) => story.tasks) ?? [], [planQuery.data?.userStories]);
   const taskCompletions = form.watch('taskCompletions');
 
   const completedPoints = tasks.reduce((sum, task) => {

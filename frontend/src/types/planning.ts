@@ -23,10 +23,15 @@ export interface MismatchWarning {
 export interface SprintPlan {
   teamId: string;
   sprintGoal: string;
+  userStories: UserStory[];
+}
+
+/**
+ * Frontend-only: SprintPlan with sprintId added for navigation and storage.
+ * The backend doesn't return sprintId, so we add it on the frontend.
+ */
+export interface SprintPlanWithId extends SprintPlan {
   sprintId: string;
-  stories: UserStory[];
-  warnings: MismatchWarning[];
-  totalPoints: number;
 }
 
 export interface SprintReviewRequest {

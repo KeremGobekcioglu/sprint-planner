@@ -4,6 +4,7 @@ import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useReviewStore } from '../../store/reviewStore';
+import type { MismatchWarning as MismatchWarningType } from '../../types/planning';
 import type { Task } from '../../types/sprint';
 import { DeveloperLane } from './DeveloperLane';
 import { MismatchWarning } from './MismatchWarning';
@@ -16,8 +17,8 @@ export function ReviewPage() {
   const { planQuery, developersQuery, approveMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
 
-  const stories = planQuery.data?.stories ?? [];
-  const warnings = planQuery.data?.warnings ?? [];
+  const stories = planQuery.data?.userStories ?? [];
+  const warnings: MismatchWarningType[] = [];
   const developerLabels = useMemo(() => {
     return new Map(
       (developersQuery.data ?? []).map((developer) => [developer.id, `${developer.name} • ${developer.role}`]),

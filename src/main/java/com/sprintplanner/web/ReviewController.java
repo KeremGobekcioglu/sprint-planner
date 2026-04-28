@@ -4,6 +4,7 @@ import com.sprintplanner.application.SprintReviewService;
 import com.sprintplanner.domain.model.DevCompletion;
 import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.SprintReview;
+import com.sprintplanner.domain.port.out.EditLogRepository;
 import com.sprintplanner.web.dto.DevCompletionHttpDto;
 import com.sprintplanner.web.dto.EditLogHttpDto;
 import com.sprintplanner.web.dto.ReviewHttpDto;
@@ -21,9 +22,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReviewController {
 
     private final SprintReviewService sprintReviewService;
+    private final EditLogRepository editLogRepository;
 
-    public ReviewController(SprintReviewService sprintReviewService) {
+    public ReviewController(SprintReviewService sprintReviewService, EditLogRepository editLogRepository) {
         this.sprintReviewService = sprintReviewService;
+        this.editLogRepository = editLogRepository;
     }
 
     @PostMapping("/process")
