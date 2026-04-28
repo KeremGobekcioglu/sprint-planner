@@ -40,7 +40,41 @@ interface SubmitReviewHttpRequest {
   }>;
 }
 
+const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
+
+interface MockReviewResult {
+  success: true;
+  reviewId: string;
+  sprintId: string;
+  teamId: string;
+  summary: {
+    goalResult: SprintReviewRequest['goalResult'];
+    blockerNote: string;
+    totalPlannedPts: number;
+    totalCompletedPts: number;
+  };
+}
+
+function buildMockReviewResult(request: SprintReviewRequest): MockReviewResult {
+  return {
+    success: true,
+    reviewId: crypto.randomUUID(),
+    sprintId: request.sprintId,
+    teamId: request.teamId,
+    summary: {
+      goalResult: request.goalResult,
+      blockerNote: request.blockerNote ?? '',
+      totalPlannedPts: request.totalPlannedPts ?? 0,
+      totalCompletedPts: request.totalCompletedPts ?? 0,
+    },
+  };
+}
+
 export const submitReview = (request: SprintReviewRequest) => {
+  if (!USE_REAL_API) {
+    return Promise.resolve(buildMockReviewResult(request));
+  }
+
   const reviewId = crypto.randomUUID();
   const latestReview: ReviewHttpDto = {
     id: reviewId,
@@ -66,9 +100,13 @@ export const submitReview = (request: SprintReviewRequest) => {
     editLogs: [],
   };
 
-  return api.post('/api/reviews/process', payload).then((response) => response.data);
+  return api.post('/api/reviews', payload).then((response) => response.data);
 };
 
-export const logEdit = async (_sprintId: string, _edit: EditPayload) => {
-  return { status: 'SKIPPED_BACKEND_STEP_12' };
+export const logEdit = (sprintId: string, edit: EditPayload) => {
+  if (!USE_REAL_API) {
+    return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId, edit });
+  }
+
+  return api.post(`/api/sprints/${sprintId}/edits`, edit).then((response) => response.data);
 };

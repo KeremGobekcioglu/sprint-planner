@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
+import { getMockPlanningDefaults } from '../../api/sprintApi';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -39,6 +40,23 @@ export function PlanningPage() {
       daysOff: {},
     },
   });
+
+  useEffect(() => {
+    if (!teamId) return;
+
+    getMockPlanningDefaults(teamId)
+      .then((defaults) => {
+        form.reset({
+          epicsText: defaults.epicsText,
+          domain: 'GENERIC',
+          sprintGoal: defaults.sprintGoal,
+          daysOff: defaults.daysOff,
+        });
+      })
+      .catch(() => {
+        // If not in mock mode or error, just skip prefill
+      });
+  }, [teamId, form]);
 
   const developers = developersQuery.data ?? [];
 
