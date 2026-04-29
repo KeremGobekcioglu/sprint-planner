@@ -19,13 +19,11 @@ import java.util.*;
 @Primary
 public class GeminiDistributionAdapter implements DistributionPort {
 
-    private final Client geminiClient;
+    private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
-    private final String model;
 
-    public GeminiDistributionAdapter(GeminiConfig geminiConfig, ObjectMapper objectMapper) {
-        this.geminiClient = Client.builder().apiKey(geminiConfig.getApiKey()).build();
-        this.model = geminiConfig.getModel();
+    public GeminiDistributionAdapter(GeminiClientProvider gemini, ObjectMapper objectMapper) {
+        this.gemini = gemini;
         this.objectMapper = objectMapper;
     }
 
@@ -50,7 +48,8 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 teamProfileMemory, sprintHistoryMemory
         );
 
-        String raw = callGemini(prompt);
+        String raw = gemini.generate(prompt, 0.3f);
+
         applyAssignments(estimatedUserStories, capacityByDeveloper, raw);
 
         return new SprintPlan(teamId, sprintGoal, estimatedUserStories);
@@ -118,19 +117,9 @@ public class GeminiDistributionAdapter implements DistributionPort {
         return sb.toString();
     }
 
-    // ── Gemini call ──────────────────────────────────────────────────────────
 
-    private String callGemini(String prompt) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .temperature(0.3f)
-                .build();
 
-        GenerateContentResponse response = geminiClient.models.generateContent(
-                model, prompt, config
-        );
 
-        return response.text();
-    }
 
     // ── Apply assignments back to tasks ──────────────────────────────────────
 

@@ -20,13 +20,11 @@ public class GeminiEstimationAdapter implements EstimationPort {
 
     private static final int[] FIBONACCI = {1, 2, 3, 5, 8, 13};
 
-    private final Client geminiClient;
+    private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
-    private final String model;
 
-    public GeminiEstimationAdapter(GeminiConfig geminiConfig, ObjectMapper objectMapper) {
-        this.geminiClient = Client.builder().apiKey(geminiConfig.getApiKey()).build();
-        this.model = geminiConfig.getModel();
+    public GeminiEstimationAdapter(GeminiClientProvider gemini, ObjectMapper objectMapper) {
+        this.gemini = gemini;
         this.objectMapper = objectMapper;
     }
 
@@ -38,7 +36,7 @@ public class GeminiEstimationAdapter implements EstimationPort {
             if (story.getTasks() == null) continue;
 
             String prompt = buildPrompt(story, sprintHistoryMemory);
-            String raw = callGemini(prompt);
+            String raw = gemini.generate(prompt, 0.2f);
             applyEstimates(story, raw);
         }
 
@@ -92,19 +90,8 @@ public class GeminiEstimationAdapter implements EstimationPort {
         return sb.toString();
     }
 
-    // ── Gemini call ──────────────────────────────────────────────────────────
 
-    private String callGemini(String prompt) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .temperature(0.2f) // lower temp for estimation — we want consistency
-                .build();
 
-        GenerateContentResponse response = geminiClient.models.generateContent(
-                model, prompt, config
-        );
-
-        return response.text();
-    }
 
     // ── Apply estimates back to tasks ────────────────────────────────────────
 

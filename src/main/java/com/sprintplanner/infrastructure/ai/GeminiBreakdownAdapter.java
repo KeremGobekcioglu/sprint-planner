@@ -23,13 +23,11 @@ import java.util.UUID;
 @Primary
 public class GeminiBreakdownAdapter implements BreakdownPort {
 
-    private final Client geminiClient;
+    private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
-    private final String model;
 
-    public GeminiBreakdownAdapter(GeminiConfig geminiConfig, ObjectMapper objectMapper) {
-        this.geminiClient = Client.builder().apiKey(geminiConfig.getApiKey()).build();
-        this.model = geminiConfig.getModel();
+    public GeminiBreakdownAdapter(GeminiClientProvider gemini, ObjectMapper objectMapper) {
+        this.gemini = gemini;
         this.objectMapper = objectMapper;
     }
 
@@ -44,13 +42,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         for (Epic epic : epics) {
             String prompt = buildPrompt(epic, request, teamProfileMemory, sprintHistoryMemory);
-            String raw = callGemini(prompt);
+            String raw = gemini.generate(prompt, 0.3f);
             List<UserStory> stories = parseResponse(raw, epic.title());
 
             // Retry once if validation fails
             if (!isValid(stories)) {
                 String retryPrompt = buildRetryPrompt(raw, epic.title());
-                String retryRaw = callGemini(retryPrompt);
+                String retryRaw = gemini.generate(prompt, 0.3f);
                 stories = parseResponse(retryRaw, epic.title());
             }
 
@@ -153,20 +151,6 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             
             Please produce a corrected response now.
             """.formatted(epicTitle, previousOutput);
-    }
-
-    // ── Gemini call ──────────────────────────────────────────────────────────
-
-    private String callGemini(String prompt) {
-        GenerateContentConfig config = GenerateContentConfig.builder()
-                .temperature(0.4f)
-                .build();
-
-        GenerateContentResponse response = geminiClient.models.generateContent(
-                model, prompt, config
-        );
-
-        return response.text();
     }
 
     // ── Parsing ──────────────────────────────────────────────────────────────
