@@ -15,15 +15,14 @@ public class GeminiClientProvider {
     private static final Logger log = LoggerFactory.getLogger(GeminiClientProvider.class);
 
     // 1. Keep your model identifiers
-    public static final String MODEL_BREAKDOWN    = "gemini-2-flash";
+    public static final String MODEL_BREAKDOWN    = "gemini-3-flash-preview";
     public static final String MODEL_ESTIMATION   = "gemini-2.5-flash-lite";
-    public static final String MODEL_DISTRIBUTION = "gemini-2.5-flash-lite";
+    public static final String MODEL_DISTRIBUTION = "gemini-2.5-flash";
 
-    // 2. Change the Map keys to "Category Names" instead of the model values
     private static final Map<String, List<String>> FALLBACK_CHAINS = Map.of(
-            "BREAKDOWN",    List.of("gemini-3-flash", "gemini-2.5-flash"),
-            "ESTIMATION",   List.of("gemini-2.5-flash-lite", "gemini-3-flash"),
-            "DISTRIBUTION", List.of("gemini-2.5-flash-lite", "gemini-2.0-flash-lite")
+            MODEL_BREAKDOWN,    List.of("gemini-3-flash-preview",  "gemini-2.5-flash"),
+            MODEL_ESTIMATION,   List.of("gemini-2.5-flash-lite",   "gemini-2.5-flash"),
+            MODEL_DISTRIBUTION, List.of("gemini-2.5-flash",        "gemini-2.5-flash-lite")
     );
 
     private final Client client;

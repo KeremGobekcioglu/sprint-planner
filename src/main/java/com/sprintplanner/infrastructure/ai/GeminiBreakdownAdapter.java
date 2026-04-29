@@ -42,13 +42,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         for (Epic epic : epics) {
             String prompt = buildPrompt(epic, request, teamProfileMemory, sprintHistoryMemory);
-            String raw = gemini.generate(prompt, 0.3f);
+            String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
             List<UserStory> stories = parseResponse(raw, epic.title());
 
             // Retry once if validation fails
             if (!isValid(stories)) {
                 String retryPrompt = buildRetryPrompt(raw, epic.title());
-                String retryRaw = gemini.generate(prompt, 0.3f);
+                String retryRaw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
                 stories = parseResponse(retryRaw, epic.title());
             }
 

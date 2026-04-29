@@ -24,6 +24,9 @@ export function usePlanning(teamId: string | undefined) {
 
   return {
     developersQuery,
-    planMutation,
+    planMutation: {
+      ...planMutation,
+      submittedAt: planMutation.submittedAt ?? null,
+    },
   };
 }

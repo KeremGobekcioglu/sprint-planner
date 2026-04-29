@@ -44,7 +44,10 @@ public class PlanningOrchestrator implements PlanningInputPort {
         this.developerRepository = developerRepository;
         this.memoryReader = memoryReader;
     }
-
+    private void sleep(long ms) {
+        try { Thread.sleep(ms); }
+        catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+    }
     @Override
     public SprintPlan planSprint(PlanningRequest request) {
         validateRequest(request);
@@ -56,8 +59,9 @@ public class PlanningOrchestrator implements PlanningInputPort {
         String sprintHistoryMemory = memoryReader.readSprintHistory(request.teamId());
 
         List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, sprintHistoryMemory);
+        sleep(1500);
         List<UserStory> estimated = estimationPort.estimate(brokenDown, sprintHistoryMemory);
-
+        sleep(1500);
         Map<java.util.UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
             developerRepository.findByTeamId(request.teamId()),
             team.getSprintLengthDays(),

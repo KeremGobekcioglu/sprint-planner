@@ -48,7 +48,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 teamProfileMemory, sprintHistoryMemory
         );
 
-        String raw = gemini.generate(prompt, 0.3f);
+        String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION);
 
         applyAssignments(estimatedUserStories, capacityByDeveloper, raw);
 

@@ -522,7 +522,7 @@ STEP 17 — Polish
 | shadcn/ui over MUI | Components live in your repo — agent can read and modify them. MUI is a black box. |
 | React Query for server state | Handles caching, loading, error, retry automatically. Less code for the agent to generate. |
 | Zustand for client state | Simpler than Redux. Agent makes fewer mistakes. |
-| 60s Axios timeout | Gemini pipeline can take 10–30s. Default 5s would time out on every real call. |
+| 5 minutes Axios timeout | Gemini pipeline can take 10–30s. Default 5s would time out on every real call. |
 | TypeScript strict mode | Agent mistakes caught at compile time before you review. |
 | Feature folders | Each screen is self-contained. Agent works in one folder per session. |
 | React Hook Form | Performant, less re-renders, integrates cleanly with Zod validation. |
