@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+frontend/.env
+src\main\resources\application.properties
+
+.env
