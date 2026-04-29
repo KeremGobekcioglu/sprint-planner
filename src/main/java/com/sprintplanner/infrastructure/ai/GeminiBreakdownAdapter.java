@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -37,25 +38,23 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             String teamProfileMemory,
             String sprintHistoryMemory
     ) {
-        List<UserStory> allStories = new ArrayList<>();
-
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
-        for (Epic epic : epics) {
-            String prompt = buildPrompt(epic, request, teamProfileMemory, sprintHistoryMemory);
-            String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
-            List<UserStory> stories = parseResponse(raw, epic.title());
+        if (epics.isEmpty()) return List.of();
 
-            // Retry once if validation fails
-            if (!isValid(stories)) {
-                String retryPrompt = buildRetryPrompt(raw, epic.title());
-                String retryRaw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
-                stories = parseResponse(retryRaw, epic.title());
-            }
+        // ONE call for all epics
+        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory);
+        String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
+        List<UserStory> stories = parseResponse(raw, epics);
 
-            allStories.addAll(stories);
+        // Retry once if validation fails
+        if (!isValid(stories)) {
+            String retryPrompt = buildRetryPrompt(raw);
+// in breakdown() retry:
+            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_ESTIMATION);
+            stories = parseResponse(retryRaw, epics);
         }
 
-        return allStories;
+        return stories;
     }
 
     // ── Prompt ───────────────────────────────────────────────────────────────
@@ -137,7 +136,76 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
 
         return sb.toString();
     }
+    private String buildBatchPrompt(List<Epic> epics, PlanningRequest request,
+                                    String teamProfile, String sprintHistory) {
+        StringBuilder sb = new StringBuilder();
 
+        sb.append("You are an expert agile sprint planner. Break down ALL epics below into user stories and tasks.\n\n");
+
+        sb.append("## Domain\n").append(request.domain()).append("\n\n");
+        sb.append("## Sprint Goal\n").append(request.sprintGoal()).append("\n\n");
+
+        sb.append("## Epics\n");
+        for (int i = 0; i < epics.size(); i++) {
+            Epic epic = epics.get(i);
+            sb.append((i + 1)).append(". Title: ").append(epic.title()).append("\n");
+            if (epic.description() != null && !epic.description().isBlank()) {
+                sb.append("   Description: ").append(epic.description()).append("\n");
+            }
+        }
+        sb.append("\n");
+
+        if (teamProfile != null && !teamProfile.isBlank()) {
+            sb.append("## Team Preferences\n").append(teamProfile).append("\n\n");
+        }
+
+        if (sprintHistory != null && !sprintHistory.isBlank()) {
+            sb.append("## Sprint History\n").append(sprintHistory).append("\n\n");
+        }
+
+        sb.append("## Domain-Specific Rules\n");
+        switch (request.domain()) {
+            case "FINTECH" -> sb.append(
+                    "- Strict testable acceptance criteria.\n" +
+                            "- Include error handling and compliance tasks.\n" +
+                            "- Conservative estimates.\n"
+            );
+            case "E_COMMERCE" -> sb.append(
+                    "- Include A/B test and analytics tasks.\n" +
+                            "- Mobile-first UI tasks must be explicit.\n"
+            );
+            default -> sb.append(
+                    "- Balanced breakdown, flag ambiguous requirements.\n"
+            );
+        }
+        sb.append("\n");
+
+        sb.append("## Output Rules\n");
+        sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");
+        sb.append("Each element is a user story object with: epicTitle (string), title (string), tasks (array of 2-4 objects).\n");
+        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops).\n");
+        sb.append("Produce 1-3 user stories per epic.\n\n");
+
+        sb.append("## Example Output Shape\n");
+        sb.append("""
+        [
+          {
+            "epicTitle": "Add IBAN validation to money transfer flow",
+            "title": "User can complete IBAN transfer",
+            "tasks": [
+              {
+                "title": "Implement IBAN validation endpoint",
+                "description": "POST /transfers/validate-iban",
+                "acceptanceCriterion": "Invalid IBANs return 400. Valid IBANs return 200.",
+                "roleTag": "backend"
+              }
+            ]
+          }
+        ]
+        """);
+
+        return sb.toString();
+    }
     private String buildRetryPrompt(String previousOutput, String epicTitle) {
         return """
             Your previous response for epic "%s" was invalid or incomplete.
@@ -155,8 +223,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
 
     // ── Parsing ──────────────────────────────────────────────────────────────
 
-    private List<UserStory> parseResponse(String raw, String epicTitle) {
+    private List<UserStory> parseResponse(String raw, List<Epic> epics) {
         List<UserStory> stories = new ArrayList<>();
+
+        // fallback epicTitle if LLM doesn't return one
+        Set<String> epicTitles = epics.stream()
+                .map(Epic::title)
+                .collect(java.util.stream.Collectors.toSet());
 
         try {
             String cleaned = raw.trim()
@@ -168,6 +241,11 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             if (!root.isArray()) return stories;
 
             for (JsonNode storyNode : root) {
+                String epicTitle = storyNode.path("epicTitle").asText("");
+                if (epicTitle.isBlank() && !epicTitles.isEmpty()) {
+                    epicTitle = epicTitles.iterator().next();
+                }
+
                 UserStory story = new UserStory(
                         UUID.randomUUID(),
                         null,
@@ -199,10 +277,20 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             }
 
         } catch (Exception e) {
-            // Parsing failed — return empty list, orchestrator will retry or halt
+            // parsing failed — return empty, orchestrator will retry
         }
 
         return stories;
+    }
+
+    private String buildRetryPrompt(String previousOutput) {
+        return """
+        Your previous response was invalid or incomplete.
+        Previous output: %s
+        
+        Fix it. Return a raw JSON array only — no markdown, no backticks.
+        Each story needs: epicTitle, title, tasks (2-4 items each with title, description, acceptanceCriterion, roleTag).
+        """.formatted(previousOutput);
     }
 
     // ── Validation ───────────────────────────────────────────────────────────

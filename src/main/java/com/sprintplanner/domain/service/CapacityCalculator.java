@@ -29,10 +29,10 @@ public class CapacityCalculator {
                 continue;
             }
 
-            int daysOff = 0;
-            if (daysOffByDeveloper != null) {
-                daysOff = Math.max(0, daysOffByDeveloper.getOrDefault(developer.getId(), 0));
-            }
+            Integer rawDaysOff = daysOffByDeveloper != null
+                    ? daysOffByDeveloper.get(developer.getId())
+                    : null;
+            int daysOff = Math.max(0, rawDaysOff != null ? rawDaysOff : 0);
 
             int availableDays = Math.max(0, sprintLengthDays - daysOff);
             if (availableDays == 0) {
