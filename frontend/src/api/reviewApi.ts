@@ -1,4 +1,5 @@
 import api from './axios';
+import { normalizeSprintId } from './sprintApi';
 import type { SprintReviewRequest } from '../types/planning';
 
 export interface EditPayload {
@@ -104,9 +105,11 @@ export const submitReview = (request: SprintReviewRequest) => {
 };
 
 export const logEdit = (sprintId: string, edit: EditPayload) => {
+  const canonicalSprintId = normalizeSprintId(sprintId);
+
   if (!USE_REAL_API) {
-    return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId, edit });
+    return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId: canonicalSprintId, edit });
   }
 
-  return api.post(`/api/sprints/${sprintId}/edits`, edit).then((response) => response.data);
+  return api.post(`/api/sprints/${canonicalSprintId}/edits`, edit).then((response) => response.data);
 };

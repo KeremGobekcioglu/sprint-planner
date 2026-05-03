@@ -3,9 +3,25 @@ import { getDevelopers } from './teamApi';
 import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 function getSprintPlanStorageKey(sprintId: string) {
   return `sprint-plan:${sprintId}`;
+}
+
+export function normalizeSprintId(rawSprintId: string): string {
+  const trimmed = rawSprintId.trim();
+  const exactUuid = trimmed.match(new RegExp(`^${UUID_PATTERN.source}$`, 'i'));
+  if (exactUuid) {
+    return trimmed;
+  }
+
+  const embeddedUuid = trimmed.match(UUID_PATTERN);
+  if (embeddedUuid) {
+    return embeddedUuid[0];
+  }
+
+  return trimmed;
 }
 
 function persistSprintPlan(plan: SprintPlan, sprintId: string) {
@@ -14,6 +30,29 @@ function persistSprintPlan(plan: SprintPlan, sprintId: string) {
   }
 
   window.localStorage.setItem(getSprintPlanStorageKey(sprintId), JSON.stringify(plan));
+}
+
+function resolveSprintIdFromPlan(plan: SprintPlan): string {
+  const sprintIds = Array.from(
+    new Set(
+      plan.userStories
+        .map((story) => story.sprintId)
+        .filter((value): value is string => Boolean(value && value.trim().length > 0)),
+    ),
+  );
+
+  if (sprintIds.length === 1) {
+    const [onlySprintId] = sprintIds;
+    if (onlySprintId) {
+      return onlySprintId;
+    }
+  }
+
+  if (sprintIds.length > 1) {
+    throw new Error('Planning response contains multiple sprint IDs.');
+  }
+
+  throw new Error('Planning response did not include sprintId on user stories.');
 }
 
 async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): Promise<SprintPlan> {
@@ -71,8 +110,8 @@ export const createSprintPlan = (request: PlanningRequest): Promise<SprintPlanWi
     }));
   }
 
-  const sprintId = `sprint-${request.teamId}-${Date.now()}`;
   return api.post<SprintPlan>('/api/sprints/plan', request).then((response) => {
+    const sprintId = resolveSprintIdFromPlan(response.data);
     persistSprintPlan(response.data, sprintId);
     return {
       ...response.data,
@@ -82,12 +121,14 @@ export const createSprintPlan = (request: PlanningRequest): Promise<SprintPlanWi
 };
 
 export const getSprintPlan = (sprintId: string): Promise<SprintPlanWithId> => {
+  const canonicalSprintId = normalizeSprintId(sprintId);
+
   if (USE_REAL_API) {
-    return api.get<SprintPlan>(`/api/sprints/${sprintId}/plan`).then((response) => {
-      persistSprintPlan(response.data, sprintId);
+    return api.get<SprintPlan>(`/api/sprints/${canonicalSprintId}/plan`).then((response) => {
+      persistSprintPlan(response.data, canonicalSprintId);
       return {
         ...response.data,
-        sprintId,
+        sprintId: canonicalSprintId,
       };
     });
   }
@@ -96,28 +137,37 @@ export const getSprintPlan = (sprintId: string): Promise<SprintPlanWithId> => {
     return Promise.reject(new Error('Sprint plan storage is unavailable in this environment.'));
   }
 
-  const raw = window.localStorage.getItem(getSprintPlanStorageKey(sprintId));
+  const raw = window.localStorage.getItem(getSprintPlanStorageKey(canonicalSprintId));
   if (!raw) {
-    return Promise.reject(new Error(`Sprint plan not found for sprintId=${sprintId}`));
+    return Promise.reject(new Error(`Sprint plan not found for sprintId=${canonicalSprintId}`));
   }
 
   try {
     const plan = JSON.parse(raw) as SprintPlan;
     return Promise.resolve({
       ...plan,
-      sprintId,
+      sprintId: canonicalSprintId,
     });
   } catch {
-    return Promise.reject(new Error(`Stored sprint plan is invalid JSON for sprintId=${sprintId}`));
+    return Promise.reject(new Error(`Stored sprint plan is invalid JSON for sprintId=${canonicalSprintId}`));
   }
 };
 
 export const approvePlan = (sprintId: string) => {
+  const canonicalSprintId = normalizeSprintId(sprintId);
+
   if (!USE_REAL_API) {
-    return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId });
+    return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId: canonicalSprintId });
   }
 
-  return api.post(`/api/sprints/${sprintId}/approve`).then((response) => response.data);
+  return api.post(`/api/sprints/${canonicalSprintId}/approve`).then((response) => response.data);
+};
+
+export const pushPlanToTrello = async (sprintId: string) => {
+  return Promise.resolve({
+    sprintId,
+    message: 'Done - mocked Trello push completed.',
+  });
 };
 
 export interface MockPlanningDefaults {

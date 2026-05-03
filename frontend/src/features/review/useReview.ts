@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDevelopers } from '../../api/teamApi';
-import { approvePlan, getSprintPlan } from '../../api/sprintApi';
+import { approvePlan, getSprintPlan, pushPlanToTrello } from '../../api/sprintApi';
 import { logEdit, type EditPayload } from '../../api/reviewApi';
 import type { SprintPlanWithId } from '../../types/planning';
 
@@ -10,17 +10,14 @@ export function useReview(sprintId: string | undefined) {
   const planQuery = useQuery<SprintPlanWithId | undefined>({
     queryKey: ['sprint', sprintId],
     queryFn: async () => {
-      const cachedPlan = queryClient.getQueryData<SprintPlanWithId>(['sprint', sprintId]);
-      if (cachedPlan) {
-        return cachedPlan;
-      }
       if (!sprintId) {
         return undefined;
       }
       return getSprintPlan(sprintId);
     },
     enabled: Boolean(sprintId),
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: 'always',
     retry: false,
   });
 
@@ -28,6 +25,13 @@ export function useReview(sprintId: string | undefined) {
     mutationFn: (id: string) => approvePlan(id),
     onError: (error) => {
       console.error('Approve failed', error);
+    },
+  });
+
+  const pushTrelloMutation = useMutation({
+    mutationFn: (id: string) => pushPlanToTrello(id),
+    onError: (error) => {
+      console.error('Mock Trello push failed', error);
     },
   });
 
@@ -52,6 +56,7 @@ export function useReview(sprintId: string | undefined) {
     planQuery,
     developersQuery,
     approveMutation,
+    pushTrelloMutation,
     logEditMutation,
   };
 }

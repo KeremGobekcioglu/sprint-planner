@@ -18,6 +18,7 @@ export function SprintClosePage() {
   const { sprintId } = useParams();
   const { planQuery, submitMutation } = useSprintClose(sprintId);
   const [submitted, setSubmitted] = useState(false);
+  const effectiveSprintId = planQuery.data?.sprintId ?? sprintId;
 
   const form = useForm<CloseFormValues>({
     defaultValues: {
@@ -73,7 +74,7 @@ export function SprintClosePage() {
           <form
             className="space-y-4"
             onSubmit={form.handleSubmit((values) => {
-              if (!sprintId) {
+              if (!effectiveSprintId) {
                 return;
               }
 
@@ -84,7 +85,7 @@ export function SprintClosePage() {
               submitMutation.mutate(
                 {
                   teamId: planQuery.data.teamId,
-                  sprintId,
+                  sprintId: effectiveSprintId,
                   goalResult: values.goalResult,
                   blockerNote: values.blockerNote || undefined,
                   taskCompletions: values.taskCompletions,

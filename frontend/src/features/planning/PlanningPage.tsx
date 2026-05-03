@@ -93,13 +93,19 @@ export function PlanningPage() {
               })
               .filter((epic) => epic.title.length > 0);
 
-            const payload: PlanningRequest = {
-              teamId,
-              domain: values.domain,
-              sprintGoal: values.sprintGoal,
-              epics,
-              daysOff: values.daysOff,
-            };
+const sanitizedDaysOff = Object.fromEntries(
+    Object.entries(values.daysOff)
+        .map(([id, val]) => [id, isNaN(val) || val == null ? 0 : val])
+        .filter(([_, val]) => (val as number) > 0)  // only send non-zero
+);
+
+const payload: PlanningRequest = {
+    teamId,
+    domain: values.domain,
+    sprintGoal: values.sprintGoal,
+    epics,
+    daysOff: sanitizedDaysOff,
+};
 
             setTeam(teamId);
             planMutation.mutate(payload, {

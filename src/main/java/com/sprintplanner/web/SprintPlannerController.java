@@ -15,8 +15,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,6 +30,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/sprints")
 public class SprintPlannerController {
+
+    private static final Pattern UUID_PATTERN = Pattern.compile(
+        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
+    );
 
     private final PlanningInputPort planningInputPort;
     private final SprintRepository sprintRepository;
@@ -79,9 +86,10 @@ public class SprintPlannerController {
     }
 
     @GetMapping("/{sprintId}/plan")
-    public ResponseEntity<SprintPlan> getSprintPlan(@PathVariable UUID sprintId) {
-        Sprint sprint = sprintRepository.findById(sprintId)
-            .orElseThrow(() -> new IllegalArgumentException("Sprint not found: " + sprintId));
+    public ResponseEntity<SprintPlan> getSprintPlan(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
         
         SprintPlan plan = new SprintPlan(
             sprint.getTeamId(),
@@ -92,9 +100,10 @@ public class SprintPlannerController {
     }
 
     @PostMapping("/{sprintId}/approve")
-    public ResponseEntity<String> approveSprint(@PathVariable UUID sprintId) {
-        Sprint sprint = sprintRepository.findById(sprintId)
-            .orElseThrow(() -> new IllegalArgumentException("Sprint not found: " + sprintId));
+    public ResponseEntity<String> approveSprint(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
         
         sprint.setStatus(Sprint.Status.ACTIVE);
         sprint.setReviewedAt(Instant.now());
@@ -104,10 +113,11 @@ public class SprintPlannerController {
     }
 
     @PostMapping("/{sprintId}/edits")
-    public ResponseEntity<String> logEdit(@PathVariable UUID sprintId, @RequestBody LogEditHttpRequest request) {
+    public ResponseEntity<String> logEdit(@PathVariable String sprintId, @RequestBody LogEditHttpRequest request) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
         EditLog log = new EditLog(
             UUID.randomUUID(),
-            sprintId,
+            normalizedSprintId,
             request.field(),
             request.oldValue(),
             request.newValue(),
@@ -116,5 +126,19 @@ public class SprintPlannerController {
         );
         editLogRepository.save(log);
         return ResponseEntity.ok("Edit logged.");
+    }
+
+    private UUID normalizeSprintId(String rawSprintId) {
+        if (rawSprintId == null || rawSprintId.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "sprintId path variable is required.");
+        }
+
+        String trimmed = rawSprintId.trim();
+        Matcher matcher = UUID_PATTERN.matcher(trimmed);
+        if (matcher.find()) {
+            return UUID.fromString(matcher.group());
+        }
+
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid sprintId: " + rawSprintId);
     }
 }

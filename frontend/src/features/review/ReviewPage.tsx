@@ -14,8 +14,9 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, deferTask, addEdit, reset } = useReviewStore();
-  const { planQuery, developersQuery, approveMutation, logEditMutation } = useReview(sprintId);
+  const { planQuery, developersQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const effectiveSprintId = planQuery.data?.sprintId;
 
   const stories = planQuery.data?.userStories ?? [];
   const warnings: MismatchWarningType[] = [];
@@ -47,18 +48,32 @@ export function ReviewPage() {
       actions={
         <button
           className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!hasReviewedAllWarnings || approveMutation.isPending || !sprintId}
+          disabled={
+            !planQuery.data ||
+            !hasReviewedAllWarnings ||
+            approveMutation.isPending ||
+            pushTrelloMutation.isPending ||
+            !effectiveSprintId
+          }
           onClick={() => {
-            if (!sprintId) return;
-            approveMutation.mutate(sprintId, {
+            if (!effectiveSprintId) return;
+            approveMutation.mutate(effectiveSprintId, {
               onSuccess: () => {
-                reset();
-                navigate(`/sprints/${sprintId}/close`);
+                pushTrelloMutation.mutate(effectiveSprintId, {
+                  onSuccess: () => {
+                    reset();
+                    navigate(`/sprints/${effectiveSprintId}/close`);
+                  },
+                });
               },
             });
           }}
         >
-          {approveMutation.isPending ? 'Approving...' : 'Approve & Push to Trello'}
+          {approveMutation.isPending
+            ? 'Approving...'
+            : pushTrelloMutation.isPending
+              ? 'Pushing to Trello...'
+              : 'Approve & Push to Trello'}
         </button>
       }
     >
@@ -90,7 +105,7 @@ export function ReviewPage() {
               capacity={20}
               onDropTask={(taskId, targetDeveloperId) => {
                 const sourceTask = allTasks.find((task) => task.id === taskId);
-                if (!sourceTask || !sprintId) return;
+                if (!sourceTask || !effectiveSprintId) return;
 
                 const oldValue = overrides[taskId] ?? sourceTask.assignedDevId ?? 'unassigned';
                 if (oldValue === targetDeveloperId) return;
@@ -103,10 +118,10 @@ export function ReviewPage() {
                   newValue: targetDeveloperId,
                 };
                 addEdit(edit);
-                logEditMutation.mutate({ id: sprintId, edit });
+                logEditMutation.mutate({ id: effectiveSprintId, edit });
               }}
               onEdit={(taskId, field, oldValue, newValue) => {
-                if (!sprintId) return;
+                if (!effectiveSprintId) return;
                 const edit = {
                   field,
                   entityId: taskId,
@@ -114,11 +129,11 @@ export function ReviewPage() {
                   newValue,
                 };
                 addEdit(edit);
-                logEditMutation.mutate({ id: sprintId, edit });
+                logEditMutation.mutate({ id: effectiveSprintId, edit });
               }}
               onDefer={(taskId) => {
                 deferTask(taskId);
-                if (!sprintId) return;
+                if (!effectiveSprintId) return;
                 const edit = {
                   field: 'deferred',
                   entityId: taskId,
@@ -126,7 +141,7 @@ export function ReviewPage() {
                   newValue: true,
                 };
                 addEdit(edit);
-                logEditMutation.mutate({ id: sprintId, edit });
+                logEditMutation.mutate({ id: effectiveSprintId, edit });
               }}
             />
           ))}

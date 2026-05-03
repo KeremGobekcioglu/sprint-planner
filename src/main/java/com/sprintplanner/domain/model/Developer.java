@@ -38,6 +38,10 @@ public class Developer {
     @Column(name = "base_velocity", nullable = false)
     private int baseVelocity;
 
+    /** Trello member ID — only set if imported from Trello board. */
+    @Column(name = "trello_member_id")
+    private String trelloMemberId;
+
     public Developer() {}
 
     public Developer(UUID id, UUID teamId, String name, String role, int baseVelocity) {
@@ -65,4 +69,6 @@ public class Developer {
     public void setName(String name) { this.name = name; }
     public void setRole(String role) { this.role = role; }
     public void setBaseVelocity(int baseVelocity) { this.baseVelocity = baseVelocity; }
+    public String getTrelloMemberId() { return trelloMemberId; }
+    public void setTrelloMemberId(String trelloMemberId) { this.trelloMemberId = trelloMemberId; }
 }

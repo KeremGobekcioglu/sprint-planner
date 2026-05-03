@@ -1,0 +1,229 @@
+Good call, frontend is easier. Go to your team creation UI and create:
+Team
+
+Name: Fintech Transfer Squad
+Domain: FINTECH
+Sprint length: 10
+
+Developers (add all 4):
+NameRoleBase VelocityAhmetbackend16Busebackend14Cerenbackend12Egeqa10
+After creating them, the DB will have real UUIDs. Then go to the planning screen, paste these epics:
+Epic 1
+
+Title: Add IBAN validation to money transfer flow
+Description: Validate IBAN format and checksum on transfer submission. Include error handling for invalid/unsupported IBANs.
+
+Epic 2
+
+Title: End-of-day reconciliation report for settlements
+Description: Generate a daily report summarising all settled transactions. Must handle edge cases: failed settlements, partial matches.
+
+Sprint goal: Deliver IBAN validation and reconciliation report to unblock compliance sign-off
+Days off: Ceren → 2 days
+Hit run and paste what comes back — either the plan output or the error.
+
+
+{
+    "teamId": "4761ca48-80f0-4cb6-b042-4c16fa2e4be1",
+    "sprintGoal": "Deliver IBAN validation and reconciliation report to unblock compliance sign-off",
+    "userStories": [
+        {
+            "id": "5090a56e-8127-4f4e-a0e5-e6a8f235ed6d",
+            "sprintId": "d84640e0-651b-4768-a9d8-1526fe56862d",
+            "sprint": null,
+            "epicTitle": "Add IBAN validation to money transfer flow",
+            "title": "Backend IBAN Validation Service",
+            "storyPoints": 13,
+            "status": "PLANNED",
+            "tasks": [
+                {
+                    "id": "4c50a907-5530-45f9-b3ef-d9f690d378ec",
+                    "storyId": "5090a56e-8127-4f4e-a0e5-e6a8f235ed6d",
+                    "story": null,
+                    "assignedDevId": "a7c1b4e9-5db2-4f0a-b1ef-16648c955d3c",
+                    "assignedDeveloper": null,
+                    "title": "Implement MOD-97 checksum logic",
+                    "description": "Develop a core utility to validate IBANs using the ISO 7064 Mod 97-10 algorithm for all supported SEPA countries.",
+                    "acceptanceCriterion": "Utility correctly identifies valid and invalid checksums for a test suite of 50 diverse IBANs.",
+                    "roleTag": "backend",
+                    "storyPoints": 8,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "246da302-28f8-4c26-bc17-8146e3177d81",
+                    "storyId": "5090a56e-8127-4f4e-a0e5-e6a8f235ed6d",
+                    "story": null,
+                    "assignedDevId": "05e9a593-877a-4a47-956e-940c685daf57",
+                    "assignedDeveloper": null,
+                    "title": "Create IBAN validation API endpoint",
+                    "description": "Expose a POST /v1/transfers/validate-iban endpoint that accepts an IBAN string and returns validation status.",
+                    "acceptanceCriterion": "Endpoint returns 200 for valid IBANs and 422 with a 'INVALID_CHECKSUM' or 'UNSUPPORTED_COUNTRY' code for failures.",
+                    "roleTag": "backend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "e6772efd-fd67-4892-a3ad-c6961b2166f4",
+                    "storyId": "5090a56e-8127-4f4e-a0e5-e6a8f235ed6d",
+                    "story": null,
+                    "assignedDevId": "a7c1b4e9-5db2-4f0a-b1ef-16648c955d3c",
+                    "assignedDeveloper": null,
+                    "title": "Unit tests for edge-case IBANs",
+                    "description": "Write automated tests for IBANs with incorrect lengths, invalid characters, and unsupported country prefixes.",
+                    "acceptanceCriterion": "Test suite achieves 100% code coverage on the validation logic branch.",
+                    "roleTag": "qa",
+                    "storyPoints": 3,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                }
+            ]
+        },
+        {
+            "id": "8af129e8-909f-414c-887a-e6a38ae0fc44",
+            "sprintId": "d84640e0-651b-4768-a9d8-1526fe56862d",
+            "sprint": null,
+            "epicTitle": "Add IBAN validation to money transfer flow",
+            "title": "Frontend IBAN Input and Error Handling",
+            "storyPoints": 8,
+            "status": "PLANNED",
+            "tasks": [
+                {
+                    "id": "60466855-4cdb-44c0-a1f4-a21ee5c1c47d",
+                    "storyId": "8af129e8-909f-414c-887a-e6a38ae0fc44",
+                    "story": null,
+                    "assignedDevId": "e263864a-f791-41a1-9114-935ba9d0777a",
+                    "assignedDeveloper": null,
+                    "title": "IBAN Input Component with Masking",
+                    "description": "Implement a text input field in the transfer flow that auto-formats IBANs with spaces every 4 characters.",
+                    "acceptanceCriterion": "User input is visually grouped (e.g., DE12 3456...) and non-alphanumeric characters are blocked.",
+                    "roleTag": "frontend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "4aaf525b-b826-440d-aa5a-eb438ae1dcdb",
+                    "storyId": "8af129e8-909f-414c-887a-e6a38ae0fc44",
+                    "story": null,
+                    "assignedDevId": "e263864a-f791-41a1-9114-935ba9d0777a",
+                    "assignedDeveloper": null,
+                    "title": "Real-time Validation UI Feedback",
+                    "description": "Integrate the validation API to trigger on blur or after input completion to show inline error messages.",
+                    "acceptanceCriterion": "A red error message 'Invalid IBAN format' appears immediately if the API returns a 422 error.",
+                    "roleTag": "frontend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                }
+            ]
+        },
+        {
+            "id": "2038cabb-a6fd-4851-b5d9-49948f0300d3",
+            "sprintId": "d84640e0-651b-4768-a9d8-1526fe56862d",
+            "sprint": null,
+            "epicTitle": "End-of-day reconciliation report for settlements",
+            "title": "Daily Settlement Aggregation Engine",
+            "storyPoints": 13,
+            "status": "PLANNED",
+            "tasks": [
+                {
+                    "id": "8b132367-628a-4adc-8dc0-356203770bfd",
+                    "storyId": "2038cabb-a6fd-4851-b5d9-49948f0300d3",
+                    "story": null,
+                    "assignedDevId": "16ac646d-3ae9-4df5-bdb4-45a64ea01278",
+                    "assignedDeveloper": null,
+                    "title": "Develop Reconciliation Data Query",
+                    "description": "Write a robust SQL query to aggregate daily transactions by comparing internal ledger entries against external gateway settlement files.",
+                    "acceptanceCriterion": "Query correctly categorizes records into 'Matched', 'Failed', and 'Partial Match' based on amount and reference ID.",
+                    "roleTag": "backend",
+                    "storyPoints": 8,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "45cefce6-bb30-4710-8c41-ac209f758291",
+                    "storyId": "2038cabb-a6fd-4851-b5d9-49948f0300d3",
+                    "story": null,
+                    "assignedDevId": "16ac646d-3ae9-4df5-bdb4-45a64ea01278",
+                    "assignedDeveloper": null,
+                    "title": "Automated Report Generation Job",
+                    "description": "Configure a scheduled task (Cron/Worker) to execute the reconciliation logic daily at 23:59 UTC.",
+                    "acceptanceCriterion": "Job triggers automatically and stores a record of the execution status in the system audit log.",
+                    "roleTag": "devops",
+                    "storyPoints": 3,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "e5c09b8d-5364-4111-9df1-3f5603545350",
+                    "storyId": "2038cabb-a6fd-4851-b5d9-49948f0300d3",
+                    "story": null,
+                    "assignedDevId": "05e9a593-877a-4a47-956e-940c685daf57",
+                    "assignedDeveloper": null,
+                    "title": "CSV Report Export Service",
+                    "description": "Implement a service to transform the aggregated reconciliation data into a compliance-standard CSV file.",
+                    "acceptanceCriterion": "Generated CSV includes mandatory columns: Transaction_ID, Ledger_Amount, Settlement_Amount, Variance, and Status.",
+                    "roleTag": "backend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                }
+            ]
+        },
+        {
+            "id": "5b99166f-2c0f-48f0-8dac-290cb0c33de1",
+            "sprintId": "d84640e0-651b-4768-a9d8-1526fe56862d",
+            "sprint": null,
+            "epicTitle": "End-of-day reconciliation report for settlements",
+            "title": "Compliance Reconciliation Dashboard",
+            "storyPoints": 13,
+            "status": "PLANNED",
+            "tasks": [
+                {
+                    "id": "31867d2f-e357-4b4e-a033-8af8b4f3b2e1",
+                    "storyId": "5b99166f-2c0f-48f0-8dac-290cb0c33de1",
+                    "story": null,
+                    "assignedDevId": "e263864a-f791-41a1-9114-935ba9d0777a",
+                    "assignedDeveloper": null,
+                    "title": "Secure Report Download API",
+                    "description": "Create an authenticated endpoint to retrieve historical reconciliation CSV files.",
+                    "acceptanceCriterion": "Access is restricted to users with the 'COMPLIANCE_OFFICER' role; unauthorized attempts return 403 Forbidden.",
+                    "roleTag": "backend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "bf26995a-5156-439a-8ae8-13d987a5a728",
+                    "storyId": "5b99166f-2c0f-48f0-8dac-290cb0c33de1",
+                    "story": null,
+                    "assignedDevId": "05e9a593-877a-4a47-956e-940c685daf57",
+                    "assignedDeveloper": null,
+                    "title": "Reconciliation Status UI",
+                    "description": "Build a dashboard view for compliance staff to see a list of daily reports and their high-level summary (Total Settled vs Total Failed).",
+                    "acceptanceCriterion": "Dashboard displays the last 30 days of reports with a 'Download' button for each.",
+                    "roleTag": "frontend",
+                    "storyPoints": 5,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                },
+                {
+                    "id": "6a9e2d3b-478e-4b91-ae5e-1772a7baed28",
+                    "storyId": "5b99166f-2c0f-48f0-8dac-290cb0c33de1",
+                    "story": null,
+                    "assignedDevId": "e263864a-f791-41a1-9114-935ba9d0777a",
+                    "assignedDeveloper": null,
+                    "title": "QA Verification of Partial Match Logic",
+                    "description": "Perform manual and automated testing to ensure transactions with 1-cent variances are flagged as 'Partial Match'.",
+                    "acceptanceCriterion": "Test report correctly identifies a 0.01 currency variance as a 'Partial Match' rather than 'Matched'.",
+                    "roleTag": "qa",
+                    "storyPoints": 2,
+                    "status": "PLANNED",
+                    "trelloCardId": null
+                }
+            ]
+        }
+    ]
+}
