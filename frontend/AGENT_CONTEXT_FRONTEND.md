@@ -489,11 +489,10 @@ STEP 15 — Connect to real backend
 
 STEP 16 — Error handling pass
           Every useMutation gets onError with user-visible message
-          Network timeout handling (60s Gemini calls)
+          Network timeout handling
           Empty states on all list views
 
 STEP 17 — Polish
-          Responsive layout (tablet + desktop — mobile is not a priority)
           Loading skeletons on data-heavy screens
           Keyboard navigation on ReviewPage
 ```
