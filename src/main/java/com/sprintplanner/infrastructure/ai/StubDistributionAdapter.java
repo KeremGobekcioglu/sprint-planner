@@ -1,6 +1,7 @@
 package com.sprintplanner.infrastructure.ai;
 
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.dto.SprintPlanMapper;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.DistributionPort;
@@ -27,7 +28,7 @@ public class StubDistributionAdapter implements DistributionPort {
     ) {
         List<UserStory> userStories = estimatedUserStories == null ? List.of() : estimatedUserStories;
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {
-            return new SprintPlan(teamId, sprintGoal, userStories);
+            return convertToSprintPlan(teamId, sprintGoal, userStories);
         }
 
         List<UUID> orderedDevelopers = capacityByDeveloper.entrySet()
@@ -52,7 +53,17 @@ public class StubDistributionAdapter implements DistributionPort {
             }
         }
 
-        return new SprintPlan(teamId, sprintGoal, userStories);
+        return convertToSprintPlan(teamId, sprintGoal, userStories);
+    }
+
+    private SprintPlan convertToSprintPlan(UUID teamId, String sprintGoal, List<UserStory> userStories) {
+        return new SprintPlan(
+            teamId,
+            sprintGoal,
+            userStories.stream()
+                .map(SprintPlanMapper::toDto)
+                .toList()
+        );
     }
 
     private UUID selectDeveloper(List<UUID> developerOrder, Map<UUID, Integer> remaining, int neededPoints, int start) {

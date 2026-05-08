@@ -9,6 +9,9 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.NamedAttributeNode;
+import jakarta.persistence.NamedEntityGraph;
+import jakarta.persistence.NamedSubgraph;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -22,6 +25,14 @@ import java.util.UUID;
  * Pure domain object — no framework annotations.
  */
 @Entity
+@NamedEntityGraph(
+    name = "Sprint.withUserStoriesAndTasks",
+    attributeNodes = @NamedAttributeNode(value = "userStories", subgraph = "userStoriesWithTasks"),
+    subgraphs = @NamedSubgraph(
+        name = "userStoriesWithTasks",
+        attributeNodes = @NamedAttributeNode("tasks")
+    )
+)
 @Table(name = "sprint")
 public class Sprint {
 

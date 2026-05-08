@@ -120,17 +120,49 @@ export const createSprintPlan = (request: PlanningRequest): Promise<SprintPlanWi
   });
 };
 
+function readStoredSprintPlan(sprintId: string): SprintPlan | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const raw = window.localStorage.getItem(getSprintPlanStorageKey(sprintId));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(raw) as SprintPlan;
+  } catch {
+    return null;
+  }
+}
+
 export const getSprintPlan = (sprintId: string): Promise<SprintPlanWithId> => {
   const canonicalSprintId = normalizeSprintId(sprintId);
 
   if (USE_REAL_API) {
-    return api.get<SprintPlan>(`/api/sprints/${canonicalSprintId}/plan`).then((response) => {
-      persistSprintPlan(response.data, canonicalSprintId);
-      return {
-        ...response.data,
-        sprintId: canonicalSprintId,
-      };
-    });
+    return api
+      .get<SprintPlan>(`/api/sprints/${canonicalSprintId}/plan`)
+      .then((response) => {
+        persistSprintPlan(response.data, canonicalSprintId);
+        return {
+          ...response.data,
+          sprintId: canonicalSprintId,
+        };
+      })
+      .catch((error) => {
+        const status = error?.response?.status as number | undefined;
+        if (status === 401 || status === 403) {
+          const storedPlan = readStoredSprintPlan(canonicalSprintId);
+          if (storedPlan) {
+            return {
+              ...storedPlan,
+              sprintId: canonicalSprintId,
+            };
+          }
+        }
+        return Promise.reject(error);
+      });
   }
 
   if (typeof window === 'undefined') {

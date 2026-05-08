@@ -6,6 +6,7 @@ import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.dto.SprintPlanMapper;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.DistributionPort;
@@ -40,7 +41,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             return new SprintPlan(teamId, sprintGoal, List.of());
         }
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {
-            return new SprintPlan(teamId, sprintGoal, estimatedUserStories);
+            return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories);
         }
 
         String prompt = buildPrompt(
@@ -52,7 +53,17 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         applyAssignments(estimatedUserStories, capacityByDeveloper, raw);
 
-        return new SprintPlan(teamId, sprintGoal, estimatedUserStories);
+        return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories);
+    }
+
+    private SprintPlan convertToSprintPlan(UUID teamId, String sprintGoal, List<UserStory> userStories) {
+        return new SprintPlan(
+            teamId,
+            sprintGoal,
+            userStories.stream()
+                .map(SprintPlanMapper::toDto)
+                .toList()
+        );
     }
 
     // ── Prompt ───────────────────────────────────────────────────────────────

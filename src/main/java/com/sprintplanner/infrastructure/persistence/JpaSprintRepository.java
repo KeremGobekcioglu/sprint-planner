@@ -27,6 +27,11 @@ public class JpaSprintRepository implements SprintRepository {
     }
 
     @Override
+    public Optional<Sprint> findWithStoriesAndTasksById(UUID sprintId) {
+        return sprintJpaRepository.findWithStoriesAndTasksById(sprintId);
+    }
+
+    @Override
     public List<Sprint> findByTeamId(UUID teamId) {
         return sprintJpaRepository.findByTeamId(teamId);
     }

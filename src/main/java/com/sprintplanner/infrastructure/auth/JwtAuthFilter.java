@@ -11,6 +11,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * JWT authentication filter — validates token on every request
@@ -18,7 +20,7 @@ import java.util.UUID;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtService jwtService;
-
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthFilter.class);
     public JwtAuthFilter(JwtService jwtService) {
         this.jwtService = jwtService;
     }
@@ -33,6 +35,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(userId.toString(), null, new ArrayList<>());
             SecurityContextHolder.getContext().setAuthentication(auth);
+        }
+        else {
+            // ADD THIS
+            logger.warn("JWT rejected — token present: {}, path: {}", token != null, request.getRequestURI());
         }
 
         filterChain.doFilter(request, response);

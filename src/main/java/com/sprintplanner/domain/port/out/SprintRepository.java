@@ -14,5 +14,7 @@ public interface SprintRepository {
 
     Optional<Sprint> findById(UUID sprintId);
 
+    Optional<Sprint> findWithStoriesAndTasksById(UUID sprintId);
+
     List<Sprint> findByTeamId(UUID teamId);
 }

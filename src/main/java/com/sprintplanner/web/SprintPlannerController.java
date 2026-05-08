@@ -3,8 +3,11 @@ package com.sprintplanner.web;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.dto.SprintPlanMapper;
+import com.sprintplanner.domain.dto.UserStoryDto;
 import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.Sprint;
+import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
 import com.sprintplanner.domain.port.out.EditLogRepository;
@@ -12,6 +15,7 @@ import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -72,30 +76,52 @@ public class SprintPlannerController {
             null
         );
         
-        // Set sprint ID on all user stories before persisting
+        // Convert DTOs back to entities and set sprint references before persisting
+        List<UserStory> userStories = new ArrayList<>();
         if (plan.userStories() != null) {
-            for (UserStory story : plan.userStories()) {
+            for (UserStoryDto storyDto : plan.userStories()) {
+                UserStory story = SprintPlanMapper.fromDto(storyDto);
                 story.setSprintId(sprintId);
+                story.setSprint(sprint);
+                // wire task back-references
+                if (story.getTasks() != null) {
+                    for (Task task : story.getTasks()) {
+                        task.setStory(story);
+                    }
+                }
+                userStories.add(story);
             }
         }
         
-        sprint.setUserStories(plan.userStories());
+        sprint.setUserStories(userStories);
         sprintRepository.save(sprint);
-        
-        return ResponseEntity.ok(plan);
+
+        SprintPlan planWithId = new SprintPlan(
+                plan.teamId(),
+                plan.sprintGoal(),
+                plan.userStories() == null ? List.of() : plan.userStories().stream()
+                        .map(story -> new UserStoryDto(
+                                story.id(),
+                                sprintId,
+                                story.epicTitle(),
+                                story.title(),
+                                story.storyPoints(),
+                                story.status(),
+                                story.tasks()
+                        ))
+                        .toList()
+        );
+
+        return ResponseEntity.ok(planWithId);
     }
 
     @GetMapping("/{sprintId}/plan")
     public ResponseEntity<SprintPlan> getSprintPlan(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
-        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+        Sprint sprint = sprintRepository.findWithStoriesAndTasksById(normalizedSprintId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
         
-        SprintPlan plan = new SprintPlan(
-            sprint.getTeamId(),
-            sprint.getGoal(),
-            sprint.getUserStories()
-        );
+        SprintPlan plan = SprintPlanMapper.toSprintPlan(sprint);
         return ResponseEntity.ok(plan);
     }
 
