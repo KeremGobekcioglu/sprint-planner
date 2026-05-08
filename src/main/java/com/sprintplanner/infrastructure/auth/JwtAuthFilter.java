@@ -37,8 +37,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(auth);
         }
         else {
-            // ADD THIS
             logger.warn("JWT rejected — token present: {}, path: {}", token != null, request.getRequestURI());
+            // ADD THIS:
+            if (token != null) {
+                logger.warn("Token value (first 50 chars): {}", token.substring(0, Math.min(50, token.length())));
+                try {
+                    logger.warn("validateToken result: {}", jwtService.validateToken(token));
+                } catch (Exception e) {
+                    logger.warn("validateToken threw: {}", e.getMessage());
+                }
+            }
         }
 
         filterChain.doFilter(request, response);

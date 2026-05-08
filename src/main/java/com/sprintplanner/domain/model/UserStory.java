@@ -10,7 +10,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -44,7 +46,7 @@ public class UserStory {
     private String status;
 
     @OneToMany(mappedBy = "story", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<Task> tasks = new ArrayList<>();
+    private Set<Task> tasks = new HashSet<>();
 
     public UserStory() {}
 
@@ -67,7 +69,7 @@ public class UserStory {
     public String getTitle() { return title; }
     public int getStoryPoints() { return storyPoints; }
     public String getStatus() { return status; }
-    public List<Task> getTasks() { return tasks; }
+    public Set<Task> getTasks() { return tasks; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -78,5 +80,5 @@ public class UserStory {
     public void setTitle(String title) { this.title = title; }
     public void setStoryPoints(int storyPoints) { this.storyPoints = storyPoints; }
     public void setStatus(String status) { this.status = status; }
-    public void setTasks(List<Task> tasks) { this.tasks = tasks; }
+    public void setTasks(Set<Task> tasks) { this.tasks = tasks; }
 }

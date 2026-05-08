@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -255,7 +256,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                         "PLANNED"
                 );
 
-                List<Task> tasks = new ArrayList<>();
+                Set<Task> tasks = new HashSet<>();
                 for (JsonNode taskNode : storyNode.path("tasks")) {
                     Task task = new Task(
                             UUID.randomUUID(),

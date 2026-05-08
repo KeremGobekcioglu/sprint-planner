@@ -16,8 +16,10 @@ import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -77,7 +79,7 @@ public class SprintPlannerController {
         );
         
         // Convert DTOs back to entities and set sprint references before persisting
-        List<UserStory> userStories = new ArrayList<>();
+        Set<UserStory> userStories = new HashSet<>();
         if (plan.userStories() != null) {
             for (UserStoryDto storyDto : plan.userStories()) {
                 UserStory story = SprintPlanMapper.fromDto(storyDto);

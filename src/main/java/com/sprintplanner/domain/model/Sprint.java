@@ -17,7 +17,9 @@ import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -71,7 +73,7 @@ public class Sprint {
     private Instant reviewedAt;
 
     @OneToMany(mappedBy = "sprint", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private List<UserStory> userStories = new ArrayList<>();
+    private Set<UserStory> userStories = new HashSet<>();
 
     @OneToOne(mappedBy = "sprint", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private SprintReview sprintReview;
@@ -104,7 +106,7 @@ public class Sprint {
     public Status getStatus() { return status; }
     public Instant getPlannedAt() { return plannedAt; }
     public Instant getReviewedAt() { return reviewedAt; }
-    public List<UserStory> getUserStories() { return userStories; }
+    public Set<UserStory> getUserStories() { return userStories; }
     public SprintReview getSprintReview() { return sprintReview; }
     public List<EditLog> getEditLogs() { return editLogs; }
 
@@ -119,7 +121,7 @@ public class Sprint {
     public void setStatus(Status status) { this.status = status; }
     public void setPlannedAt(Instant plannedAt) { this.plannedAt = plannedAt; }
     public void setReviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; }
-    public void setUserStories(List<UserStory> userStories) { this.userStories = userStories; }
+    public void setUserStories(Set<UserStory> userStories) { this.userStories = userStories; }
     public void setSprintReview(SprintReview sprintReview) { this.sprintReview = sprintReview; }
     public void setEditLogs(List<EditLog> editLogs) { this.editLogs = editLogs; }
 }

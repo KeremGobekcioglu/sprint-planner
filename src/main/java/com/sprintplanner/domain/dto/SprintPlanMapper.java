@@ -4,7 +4,9 @@ import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.model.Sprint;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Static utility mapper for converting JPA entities to lightweight DTOs.
@@ -120,7 +122,7 @@ public class SprintPlanMapper {
             dto.status()
         );
         if (dto.tasks() != null) {
-            List<Task> tasks = new ArrayList<>();
+            Set<Task> tasks = new HashSet<>();
             for (TaskDto taskDto : dto.tasks()) {
                 tasks.add(fromDto(taskDto));
             }

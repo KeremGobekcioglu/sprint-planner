@@ -18,6 +18,14 @@ Epic 2
 Title: End-of-day reconciliation report for settlements
 Description: Generate a daily report summarising all settled transactions. Must handle edge cases: failed settlements, partial matches.
 
+
+Title: Add IBAN validation to money transfer flow
+Description: Validate IBAN format and checksum on transfer submission. Include error handling for invalid/unsupported IBANs.
+Title: End-of-day reconciliation report for settlements
+Description: Generate a daily report summarising all settled transactions. Must handle edge cases: failed settlements, partial matches.
+
+Deliver IBAN validation and reconciliation report to unblock compliance sign-off
+
 Sprint goal: Deliver IBAN validation and reconciliation report to unblock compliance sign-off
 Days off: Ceren → 2 days
 Hit run and paste what comes back — either the plan output or the error.

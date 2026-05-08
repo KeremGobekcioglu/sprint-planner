@@ -1,0 +1,11 @@
+usePlanning.ts:21 Planning failed Error: Planning response did not include sprintId on user stories.
+    at resolveSprintIdFromPlan (sprintApi.ts:55:9)
+    at sprintApi.ts:114:22
+(anonymous) @ usePlanning.ts:21
+execute @ @tanstack_react-query.js?v=3f82888e:2182Understand this error
+:8080/api/sprints/b01dd2d5-1708-4fb0-99bf-bce96644fb82/plan:1  Failed to load resource: the server responded with a status of 403 ()
+
+sprint response came, review page opened.
+
+while logg,ng in this warning from logger jwt auth security comes up :
+2026-05-08T17:13:17.575+03:00  WARN 12688 --- [sprint-planner] [nio-8080-exec-1] c.s.infrastructure.auth.JwtAuthFilter    : JWT rejected — token present: false, path: /api/auth/login

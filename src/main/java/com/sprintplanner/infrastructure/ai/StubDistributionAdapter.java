@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -41,7 +42,7 @@ public class StubDistributionAdapter implements DistributionPort {
         int pointer = 0;
 
         for (UserStory story : userStories) {
-            List<Task> tasks = story.getTasks() == null ? new ArrayList<>() : story.getTasks();
+            Set<Task> tasks = story.getTasks() == null ? Set.of() : story.getTasks();
             for (Task task : tasks) {
                 UUID selectedDev = selectDeveloper(orderedDevelopers, remaining, task.getStoryPoints(), pointer);
                 task.setAssignedDevId(selectedDev);
