@@ -23,7 +23,7 @@ export function LoginPage() {
   const loginMutation = useMutation({
     mutationFn: () => login(email, password),
     onSuccess: (data) => {
-      loginStore(data.token, data.userId, data.email);
+      loginStore(data.token, data.userId, data.email, data.name, data.role);
       navigate('/teams');
     },
     onError: (err: unknown) => {

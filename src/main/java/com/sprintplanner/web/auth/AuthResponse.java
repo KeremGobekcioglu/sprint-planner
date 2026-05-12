@@ -6,6 +6,8 @@ package com.sprintplanner.web.auth;
 public record AuthResponse(
     String token,
     String userId,
-    String email
+    String email,
+    String name,
+    String role
 ) {}
 

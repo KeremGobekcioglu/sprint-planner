@@ -35,4 +35,9 @@ public class JpaSprintRepository implements SprintRepository {
     public List<Sprint> findByTeamId(UUID teamId) {
         return sprintJpaRepository.findByTeamId(teamId);
     }
+
+    @Override
+    public long countCompletedByTeamId(UUID teamId) {
+        return sprintJpaRepository.countByTeamIdAndStatus(teamId, Sprint.Status.COMPLETED);
+    }
 }

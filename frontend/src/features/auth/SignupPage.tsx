@@ -24,7 +24,7 @@ export function SignupPage() {
   const signupMutation = useMutation({
     mutationFn: () => register(email, password),
     onSuccess: (data) => {
-      loginStore(data.token, data.userId, data.email);
+      loginStore(data.token, data.userId, data.email, data.name, data.role);
       navigate('/teams');
     },
     onError: (err: unknown) => {

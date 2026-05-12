@@ -13,4 +13,6 @@ public interface SprintJpaRepository extends JpaRepository<Sprint, UUID> {
     Optional<Sprint> findWithStoriesAndTasksById(UUID id);
 
     List<Sprint> findByTeamId(UUID teamId);
+
+    long countByTeamIdAndStatus(UUID teamId, Sprint.Status status);
 }

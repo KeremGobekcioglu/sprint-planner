@@ -5,6 +5,7 @@ package com.sprintplanner.web.auth;
  */
 public record AuthRequest(
     String email,
+    String name,
     String password
 ) {}
 

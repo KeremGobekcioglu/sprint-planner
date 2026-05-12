@@ -17,4 +17,6 @@ public interface SprintRepository {
     Optional<Sprint> findWithStoriesAndTasksById(UUID sprintId);
 
     List<Sprint> findByTeamId(UUID teamId);
+
+    long countCompletedByTeamId(UUID teamId);
 }

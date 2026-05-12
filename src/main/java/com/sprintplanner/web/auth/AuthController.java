@@ -32,28 +32,34 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody AuthRequest request) {
-        // Check email not already taken
-        if (userRepository.findByEmail(request.email()).isPresent()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already registered");
-        }
-
         // Validate input
-        if (request.email() == null || request.email().isBlank()) {
+        String email = request.email() == null ? null : request.email().trim();
+        if (email == null || email.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
         }
         if (request.password() == null || request.password().length() < 6) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 6 characters");
         }
 
+        // Check email not already taken
+        if (userRepository.findByEmail(email).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already registered");
+        }
+
+        String name = (request.name() == null || request.name().isBlank())
+            ? deriveDisplayName(email)
+            : request.name().trim();
+        String role = userRepository.count() == 0 ? "ADMIN" : "USER";
+
         // Hash password and save user
         UUID userId = UUID.randomUUID();
         String passwordHash = passwordEncoder.encode(request.password());
-        AppUser user = new AppUser(userId, request.email(), passwordHash, Instant.now());
+        AppUser user = new AppUser(userId, email, name, role, passwordHash, Instant.now());
         userRepository.save(user);
 
         // Generate token
-        String token = jwtService.generateToken(userId);
-        return ResponseEntity.ok(new AuthResponse(token, userId.toString(), user.getEmail()));
+        String token = jwtService.generateToken(userId, role);
+        return ResponseEntity.ok(new AuthResponse(token, userId.toString(), user.getEmail(), user.getName(), user.getRole()));
     }
 
     @PostMapping("/login")
@@ -68,8 +74,16 @@ public class AuthController {
         }
 
         // Generate token
-        String token = jwtService.generateToken(user.getId());
-        return ResponseEntity.ok(new AuthResponse(token, user.getId().toString(), user.getEmail()));
+        String token = jwtService.generateToken(user.getId(), user.getRole());
+        return ResponseEntity.ok(new AuthResponse(token, user.getId().toString(), user.getEmail(), user.getName(), user.getRole()));
+    }
+
+    private String deriveDisplayName(String email) {
+        int atIndex = email.indexOf('@');
+        if (atIndex > 0) {
+            return email.substring(0, atIndex);
+        }
+        return email;
     }
 }
 

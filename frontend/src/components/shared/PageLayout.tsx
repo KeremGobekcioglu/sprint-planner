@@ -12,7 +12,7 @@ interface PageLayoutProps extends PropsWithChildren {
 export function PageLayout({ title, subtitle, actions, children }: PageLayoutProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { isAuthenticated, logout } = useAuthStore();
+  const { isAuthenticated, logout, email, role } = useAuthStore();
 
   const handleLogout = () => {
     logout();
@@ -30,6 +30,16 @@ export function PageLayout({ title, subtitle, actions, children }: PageLayoutPro
               {subtitle ? <p className="mt-2 text-sm text-slate-300">{subtitle}</p> : null}
             </div>
             <div className="flex items-center gap-2">
+              {isAuthenticated && email ? (
+                <div className="mr-2 flex items-center gap-2 rounded-full border border-slate-500/40 bg-slate-800/70 px-3 py-1 text-xs text-slate-200">
+                  <span>{email}</span>
+                  {role ? (
+                    <span className="rounded-full bg-sky-500/20 px-2 py-0.5 font-semibold text-sky-200">
+                      {role}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
               {actions}
               {isAuthenticated ? (
                 <button
