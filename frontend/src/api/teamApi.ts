@@ -11,6 +11,7 @@ export interface TeamCreateRequest {
 export interface DeveloperCreateRequest {
   name: string;
   role: Developer['role'];
+  capabilities: Developer['capabilities'];
   baseVelocity: number;
 }
 
@@ -55,25 +56,25 @@ const seededTeams: Team[] = [
 
 const seededDevelopers: Developer[] = [
   // Team Atlas (E-Commerce)
-  { id: 'dev-atlas-1', teamId: 'team-atlas', name: 'Ava Chen', role: 'backend', baseVelocity: 8 },
-  { id: 'dev-atlas-2', teamId: 'team-atlas', name: 'Marco Silva', role: 'frontend', baseVelocity: 5 },
-  { id: 'dev-atlas-3', teamId: 'team-atlas', name: 'Priya Nair', role: 'qa', baseVelocity: 3 },
-  { id: 'dev-atlas-4', teamId: 'team-atlas', name: 'Liam O’Connor', role: 'backend', baseVelocity: 7 },
+  { id: 'dev-atlas-1', teamId: 'team-atlas', name: 'Ava Chen', role: 'Senior Backend', capabilities: ['backend'], baseVelocity: 8 },
+  { id: 'dev-atlas-2', teamId: 'team-atlas', name: 'Marco Silva', role: 'Frontend Engineer', capabilities: ['frontend'], baseVelocity: 5 },
+  { id: 'dev-atlas-3', teamId: 'team-atlas', name: 'Priya Nair', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 3 },
+  { id: 'dev-atlas-4', teamId: 'team-atlas', name: 'Liam O’Connor', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 7 },
 
   // Team Orbit (Fintech)
-  { id: 'dev-orbit-1', teamId: 'team-orbit', name: 'Jordan Reed', role: 'backend', baseVelocity: 7 },
-  { id: 'dev-orbit-2', teamId: 'team-orbit', name: 'Mina Hassan', role: 'devops', baseVelocity: 6 },
-  { id: 'dev-orbit-3', teamId: 'team-orbit', name: 'Satoshi Nakamoto', role: 'backend', baseVelocity: 13 },
+  { id: 'dev-orbit-1', teamId: 'team-orbit', name: 'Jordan Reed', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 7 },
+  { id: 'dev-orbit-2', teamId: 'team-orbit', name: 'Mina Hassan', role: 'DevOps', capabilities: ['devops'], baseVelocity: 6 },
+  { id: 'dev-orbit-3', teamId: 'team-orbit', name: 'Satoshi Nakamoto', role: 'Senior Backend', capabilities: ['backend'], baseVelocity: 13 },
 
   // Team Pulse (Healthcare)
-  { id: 'dev-pulse-1', teamId: 'team-pulse', name: 'Elena Rodriguez', role: 'frontend', baseVelocity: 6 },
-  { id: 'dev-pulse-2', teamId: 'team-pulse', name: 'Kofi Mensah', role: 'backend', baseVelocity: 8 },
-  { id: 'dev-pulse-3', teamId: 'team-pulse', name: 'Sarah Jenkins', role: 'qa', baseVelocity: 5 },
+  { id: 'dev-pulse-1', teamId: 'team-pulse', name: 'Elena Rodriguez', role: 'Frontend Engineer', capabilities: ['frontend'], baseVelocity: 6 },
+  { id: 'dev-pulse-2', teamId: 'team-pulse', name: 'Kofi Mensah', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 8 },
+  { id: 'dev-pulse-3', teamId: 'team-pulse', name: 'Sarah Jenkins', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 5 },
 
   // Team Shield (Security)
-  { id: 'dev-shield-1', teamId: 'team-shield', name: 'Alex Volkov', role: 'backend', baseVelocity: 9 },
-  { id: 'dev-shield-2', teamId: 'team-shield', name: 'Dana Scully', role: 'qa', baseVelocity: 4 },
-  { id: 'dev-shield-3', teamId: 'team-shield', name: 'Fox Mulder', role: 'devops', baseVelocity: 7 }
+  { id: 'dev-shield-1', teamId: 'team-shield', name: 'Alex Volkov', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 9 },
+  { id: 'dev-shield-2', teamId: 'team-shield', name: 'Dana Scully', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 4 },
+  { id: 'dev-shield-3', teamId: 'team-shield', name: 'Fox Mulder', role: 'DevOps', capabilities: ['devops'], baseVelocity: 7 }
 ];
 
 function isBrowser() {
@@ -147,6 +148,7 @@ function createMockDeveloper(teamId: string, payload: DeveloperCreateRequest): D
     teamId,
     name: payload.name,
     role: payload.role,
+    capabilities: payload.capabilities,
     baseVelocity: payload.baseVelocity,
   };
 

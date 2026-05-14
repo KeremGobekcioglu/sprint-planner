@@ -256,7 +256,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                         "PLANNED"
                 );
 
-                Set<Task> tasks = new HashSet<>();
+                List<Task> tasks = new ArrayList<>();
                 for (JsonNode taskNode : storyNode.path("tasks")) {
                     Task task = new Task(
                             UUID.randomUUID(),

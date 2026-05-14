@@ -24,6 +24,7 @@ export interface SprintPlan {
   teamId: string;
   sprintGoal: string;
   userStories: UserStory[];
+  unassignedTasks: UserStory['tasks'];
 }
 
 /**

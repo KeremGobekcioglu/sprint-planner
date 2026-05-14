@@ -73,7 +73,7 @@ async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): 
         title: `${epic.title} - ${taskIndex === 0 ? 'Implementation' : taskIndex === 1 ? 'Validation' : `Follow-up ${taskIndex}`}`,
         description: epic.description,
         acceptanceCriterion: `Complete ${epic.title.toLowerCase()} work for ${request.sprintGoal}`,
-        roleTag: developer?.role ?? 'backend',
+        roleTag: developer?.capabilities?.[0] ?? 'backend',
         storyPoints,
         status: taskIndex === 0 ? 'TODO' : 'READY',
         trelloCardId: `${request.teamId}-${epicIndex + 1}-${taskIndex + 1}`,
@@ -95,6 +95,7 @@ async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): 
     teamId: request.teamId,
     sprintGoal: request.sprintGoal,
     userStories,
+    unassignedTasks: [],
   };
 
   persistSprintPlan(plan, sprintId);

@@ -46,9 +46,13 @@ public class TeamService {
         return isAdmin ? teamRepository.findAll() : teamRepository.findByOwnerId(currentUserId);
     }
 
-    public Developer addDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, String name, String role, int baseVelocity) {
+    public Developer addDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, String name, String role, List<String> capabilities, int baseVelocity) {
         Team team = getTeam(teamId, currentUserId, isAdmin);
         Developer developer = new Developer(UUID.randomUUID(), team.getId(), name, role, baseVelocity);
+        List<String> resolvedCapabilities = (capabilities == null || capabilities.isEmpty())
+            ? inferCapabilitiesFromRole(role)
+            : capabilities;
+        developer.setCapabilities(resolvedCapabilities);
         return developerRepository.save(developer);
     }
 
@@ -76,5 +80,28 @@ public class TeamService {
         if (team.getOwnerId() == null || !team.getOwnerId().equals(currentUserId)) {
             throw new IllegalArgumentException("Team not found: " + team.getId());
         }
+    }
+
+    private List<String> inferCapabilitiesFromRole(String roleLabel) {
+        if (roleLabel == null || roleLabel.isBlank()) {
+            return List.of();
+        }
+        String normalized = roleLabel.toLowerCase();
+        List<String> capabilities = new java.util.ArrayList<>();
+        if (normalized.contains("backend")) capabilities.add("backend");
+        if (normalized.contains("frontend") || normalized.contains("front end")) capabilities.add("frontend");
+        if (normalized.contains("fullstack") || normalized.contains("full stack")) {
+            capabilities.add("backend");
+            capabilities.add("frontend");
+        }
+        if (normalized.contains("qa") || normalized.contains("test")) capabilities.add("qa");
+        if (normalized.contains("devops") || normalized.contains("sre")) capabilities.add("devops");
+        if (normalized.contains("android")) capabilities.add("android");
+        if (normalized.contains("ios")) capabilities.add("ios");
+        if (normalized.contains("mobile")) {
+            capabilities.add("android");
+            capabilities.add("ios");
+        }
+        return capabilities;
     }
 }

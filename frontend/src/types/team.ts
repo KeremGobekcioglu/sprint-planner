@@ -1,5 +1,5 @@
 export type TeamDomain = 'E_COMMERCE' | 'FINTECH' | 'GENERIC';
-export type DeveloperRole = 'backend' | 'frontend' | 'qa' | 'devops';
+export type CapabilityTag = string;
 
 export interface Team {
   id: string;
@@ -14,6 +14,7 @@ export interface Developer {
   id: string;
   teamId: string;
   name: string;
-  role: DeveloperRole;
+  role: string;
+  capabilities: CapabilityTag[];
   baseVelocity: number;
 }

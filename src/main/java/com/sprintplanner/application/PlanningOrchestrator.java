@@ -62,21 +62,62 @@ public class PlanningOrchestrator implements PlanningInputPort {
         sleep(1500);
         List<UserStory> estimated = estimationPort.estimate(brokenDown, sprintHistoryMemory);
         sleep(1500);
+        var developers = developerRepository.findByTeamId(request.teamId());
         Map<java.util.UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
-            developerRepository.findByTeamId(request.teamId()),
+            developers,
             team.getSprintLengthDays(),
             request.daysOff() == null ? Map.of() : request.daysOff(),
             sprintHistoryMemory
         );
+        Map<java.util.UUID, List<String>> developerCapabilities = developers.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                com.sprintplanner.domain.model.Developer::getId,
+                developer -> developer.getCapabilities().isEmpty()
+                    ? inferCapabilitiesFromRole(developer.getRole())
+                    : developer.getCapabilities(),
+                (a, b) -> a,
+                java.util.LinkedHashMap::new
+            ));
 
         return distributionPort.distribute(
             request.teamId(),
             request.sprintGoal(),
             estimated,
             capacityByDeveloper,
+            developerCapabilities,
             teamProfileMemory,
             sprintHistoryMemory
         );
+    }
+
+    private List<String> inferCapabilitiesFromRole(String roleLabel) {
+        if (roleLabel == null || roleLabel.isBlank()) {
+            return List.of();
+        }
+        String normalized = roleLabel.toLowerCase();
+        List<String> capabilities = new java.util.ArrayList<>();
+        if (normalized.contains("backend")) capabilities.add("backend");
+        if (normalized.contains("frontend") || normalized.contains("front end")) capabilities.add("frontend");
+        if (normalized.contains("fullstack") || normalized.contains("full stack")) {
+            capabilities.add("backend");
+            capabilities.add("frontend");
+        }
+        if (normalized.contains("qa") || normalized.contains("test")) capabilities.add("qa");
+        if (normalized.contains("devops") || normalized.contains("sre")) capabilities.add("devops");
+        if (normalized.contains("android")) capabilities.add("android");
+        if (normalized.contains("ios")) capabilities.add("ios");
+        if (normalized.contains("mobile")) {
+            capabilities.add("android");
+            capabilities.add("ios");
+        }
+        return capabilities;
+    }
+
+    private String normalizeCapability(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private void validateRequest(PlanningRequest request) {

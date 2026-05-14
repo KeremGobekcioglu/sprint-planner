@@ -39,7 +39,7 @@ export function TeamSetupPage() {
 
   return (
     <PageLayout title="Teams" subtitle="Create your team, tune capacity and move into sprint planning.">
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-6">
         <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
           <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
           <form
@@ -141,7 +141,7 @@ export function TeamSetupPage() {
                     <div>
                       <p className="font-medium text-slate-100">{developer.name}</p>
                       <p className="text-xs uppercase tracking-wide text-slate-300">
-                        {developer.role} • Velocity {developer.baseVelocity}
+                        {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
                       </p>
                     </div>
                     <button

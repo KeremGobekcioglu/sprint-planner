@@ -19,6 +19,7 @@ export function ReviewPage() {
   const effectiveSprintId = planQuery.data?.sprintId;
 
   const stories = planQuery.data?.userStories ?? [];
+  const unassignedTasks = planQuery.data?.unassignedTasks ?? [];
   const warnings: MismatchWarningType[] = [];
   const developerLabels = useMemo(() => {
     return new Map(
@@ -26,7 +27,7 @@ export function ReviewPage() {
     );
   }, [developersQuery.data]);
 
-  const allTasks = useMemo(() => stories.flatMap((story) => story.tasks), [stories]);
+  const allTasks = useMemo(() => [...stories.flatMap((story) => story.tasks), ...unassignedTasks], [stories, unassignedTasks]);
 
   const lanes = useMemo(() => {
     const laneMap = new Map<string, Task[]>();

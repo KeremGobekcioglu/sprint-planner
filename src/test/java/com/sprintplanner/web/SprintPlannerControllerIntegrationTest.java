@@ -63,7 +63,7 @@ class SprintPlannerControllerIntegrationTest {
     @Test
     void plansSprintOverHttpUsingStubbedPipeline() {
         UUID teamId = UUID.randomUUID();
-        teamRepository.save(new Team(teamId, "HTTP Team", "GENERIC", 10, null, Instant.now()));
+       // teamRepository.save(new Team(teamId, "HTTP Team", "GENERIC", 10, null, Instant.now()));
         developerRepository.save(new Developer(UUID.randomUUID(), teamId, "Kerem", "backend", 20));
         developerRepository.save(new Developer(UUID.randomUUID(), teamId, "Asli", "frontend", 16));
 

@@ -93,6 +93,7 @@ public class TeamController {
             isAdmin,
             request.name(),
             request.role(),
+            request.capabilities(),
             request.baseVelocity()
         );
         return ResponseEntity.ok(DeveloperHttpDto.from(developer));

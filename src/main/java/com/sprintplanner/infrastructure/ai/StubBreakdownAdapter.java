@@ -6,9 +6,7 @@ import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.BreakdownPort;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -45,7 +43,7 @@ public class StubBreakdownAdapter implements BreakdownPort {
             "PLANNED"
         );
 
-        Set<Task> tasks = new HashSet<>();
+        List<Task> tasks = new ArrayList<>();
         tasks.add(new Task(
             UUID.randomUUID(),
             story.getId(),
@@ -96,20 +94,20 @@ public class StubBreakdownAdapter implements BreakdownPort {
             0,
             "PLANNED"
         );
-        story.setTasks(new HashSet<>(List.of(
-            new Task(
-                UUID.randomUUID(),
-                story.getId(),
-                null,
-                "Refine backlog",
-                "Review open items and clarify acceptance criteria.",
-                "All stories have clear acceptance criteria and owners.",
-                "backend",
-                0,
-                "PLANNED",
-                null
-            )
-        )));
+        List<Task> tasks = new ArrayList<>();
+        tasks.add(new Task(
+            UUID.randomUUID(),
+            story.getId(),
+            null,
+            "Refine backlog",
+            "Review open items and clarify acceptance criteria.",
+            "All stories have clear acceptance criteria and owners.",
+            "backend",
+            0,
+            "PLANNED",
+            null
+        ));
+        story.setTasks(tasks);
         return story;
     }
 }

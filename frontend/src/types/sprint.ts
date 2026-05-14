@@ -1,4 +1,6 @@
-import type { DeveloperRole } from './team';
+import type { CapabilityTag } from './team';
+
+export type UUID = string;
 
 export type SprintStatus = 'PLANNING' | 'IN_REVIEW' | 'ACTIVE' | 'COMPLETED';
 export type GoalResult = 'YES' | 'PARTIALLY' | 'NO';
@@ -31,7 +33,7 @@ export interface Task {
   title: string;
   description: string;
   acceptanceCriterion: string;
-  roleTag: DeveloperRole;
+  roleTag: CapabilityTag;
   storyPoints: number;
   status: string;
   trelloCardId?: string;

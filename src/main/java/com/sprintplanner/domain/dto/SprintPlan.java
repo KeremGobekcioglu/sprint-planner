@@ -10,5 +10,6 @@ import java.util.UUID;
 public record SprintPlan(
     UUID teamId,
     String sprintGoal,
-    List<UserStoryDto> userStories
+    List<UserStoryDto> userStories,
+    List<TaskDto> unassignedTasks
 ) {}

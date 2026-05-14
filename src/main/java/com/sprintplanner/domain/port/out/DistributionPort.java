@@ -16,6 +16,7 @@ public interface DistributionPort {
         String sprintGoal,
         List<UserStory> estimatedUserStories,
         Map<UUID, Integer> capacityByDeveloper,
+        Map<UUID, List<String>> developerCapabilities,
         String teamProfileMemory,
         String sprintHistoryMemory
     );

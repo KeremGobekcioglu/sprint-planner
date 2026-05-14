@@ -1,6 +1,7 @@
 package com.sprintplanner.web.dto;
 
 import com.sprintplanner.domain.model.Developer;
+import java.util.List;
 import java.util.UUID;
 
 public record DeveloperHttpDto(
@@ -8,6 +9,7 @@ public record DeveloperHttpDto(
     UUID teamId,
     String name,
     String role,
+    List<String> capabilities,
     int baseVelocity
 ) {
 
@@ -17,6 +19,7 @@ public record DeveloperHttpDto(
             developer.getTeamId(),
             developer.getName(),
             developer.getRole(),
+            developer.getCapabilities(),
             developer.getBaseVelocity()
         );
     }
