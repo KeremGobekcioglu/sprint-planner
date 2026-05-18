@@ -1,5 +1,6 @@
-import type { Task } from '../../types/sprint';
+import type { Task, UserStory } from '../../types/sprint';
 import { TaskCard } from './TaskCard';
+import { useMemo } from 'react';
 
 interface DeveloperLaneProps {
   developerId: string;
@@ -9,9 +10,10 @@ interface DeveloperLaneProps {
   onDropTask: (taskId: string, developerId: string) => void;
   onEdit: (taskId: string, field: string, oldValue: string | number, newValue: string | number) => void;
   onDefer: (taskId: string) => void;
+  stories?: UserStory[];
 }
 
-export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer }: DeveloperLaneProps) {
+export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, stories }: DeveloperLaneProps) {
   const points = tasks.reduce((sum, task) => sum + task.storyPoints, 0);
   const indicator = points > capacity ? 'text-red-700' : points > capacity * 0.8 ? 'text-amber-700' : 'text-pine';
 
@@ -34,9 +36,30 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
         </p>
       </header>
       <div className="space-y-2">
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onEdit={onEdit} onDefer={onDefer} />
-        ))}
+        {useMemo(() => {
+          const tasksByStory = new Map<string, Task[]>();
+          tasks.forEach((task) => {
+            const key = task.storyId ?? 'unassigned';
+            if (!tasksByStory.has(key)) tasksByStory.set(key, []);
+            tasksByStory.get(key)!.push(task);
+          });
+
+          return Array.from(tasksByStory.entries()).map(([storyId, storyTasks]) => (
+            <div key={storyId}>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {(() => {
+                  const story = (stories ?? []).find((s: UserStory) => s.id === storyId);
+                  return story?.epicTitle ?? 'Unassigned';
+                })()}
+              </div>
+              <div className="space-y-2">
+                {storyTasks.map((task) => (
+                  <TaskCard key={task.id} task={task} onEdit={onEdit} onDefer={onDefer} />
+                ))}
+              </div>
+            </div>
+          ));
+        }, [tasks, stories, onEdit, onDefer])}
       </div>
     </section>
   );

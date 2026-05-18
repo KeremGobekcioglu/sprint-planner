@@ -27,6 +27,12 @@ export function ReviewPage() {
     );
   }, [developersQuery.data]);
 
+  const capacityMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (developersQuery.data ?? []).forEach((dev) => map.set(dev.id, dev.baseVelocity));
+    return map;
+  }, [developersQuery.data]);
+
   const allTasks = useMemo(() => [...stories.flatMap((story) => story.tasks), ...unassignedTasks], [stories, unassignedTasks]);
 
   const lanes = useMemo(() => {
@@ -103,7 +109,12 @@ export function ReviewPage() {
               developerId={developerId}
               developerLabel={developerLabels.get(developerId) ?? (developerId === 'unassigned' ? 'Unassigned' : developerId)}
               tasks={tasks}
-              capacity={20}
+              stories={planQuery.data?.userStories ?? []}
+              capacity={
+                capacityMap.get(developerId) ??
+                (developersQuery.data ?? []).find((d) => d.id === developerId)?.baseVelocity ??
+                20
+              }
               onDropTask={(taskId, targetDeveloperId) => {
                 const sourceTask = allTasks.find((task) => task.id === taskId);
                 if (!sourceTask || !effectiveSprintId) return;

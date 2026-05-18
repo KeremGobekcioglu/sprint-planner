@@ -29,19 +29,12 @@ public class ReviewController {
         this.editLogRepository = editLogRepository;
     }
 
-    @PostMapping("/process")
-    public ResponseEntity<String> processReview(@RequestBody SubmitReviewHttpRequest request) {
-        SprintReview latest = toSprintReview(request.latestReview());
-        List<SprintReview> rollingWindow = request.rollingWindowReviews() == null
-            ? List.of(latest)
-            : request.rollingWindowReviews().stream().map(this::toSprintReview).toList();
-
-        List<EditLog> editLogs = request.editLogs() == null
-            ? List.of()
-            : request.editLogs().stream().map(this::toEditLog).toList();
-
-        sprintReviewService.processReview(request.teamId(), latest, rollingWindow, editLogs);
-        return ResponseEntity.ok("Review processed.");
+    // Accept POST /api/reviews to match frontend (was POST /api/reviews/process)
+    @PostMapping
+    public ResponseEntity<Void> submitReview(@RequestBody com.sprintplanner.web.dto.SprintReviewRequest request) {
+        // Delegate to application service which performs the close/submit workflow
+        sprintReviewService.submitReview(request);
+        return ResponseEntity.ok().build();
     }
 
     private SprintReview toSprintReview(ReviewHttpDto dto) {
