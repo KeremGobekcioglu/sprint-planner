@@ -1,13 +1,18 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
+import { createDeveloper, createTeam, getTeams, loadSampleData } from '../../api/teamApi';
+import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
+
+const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
 interface TeamFormValues {
   name: string;
@@ -19,7 +24,9 @@ interface TeamFormValues {
 export function TeamSetupPage() {
   const navigate = useNavigate();
   const { setTeam } = usePlanningStore();
+  const queryClient = useQueryClient();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
 
@@ -37,11 +44,47 @@ export function TeamSetupPage() {
     [teamsQuery.data, selectedTeamId],
   );
 
+  async function handleLoadSamples() {
+    setIsLoadingSamples(true);
+    try {
+      const result = await loadSampleData();
+      await queryClient.invalidateQueries({ queryKey: ['teams'] });
+      await queryClient.invalidateQueries({ queryKey: ['developers'] });
+
+      const refreshedTeams = await queryClient.fetchQuery({ queryKey: ['teams'], queryFn: getTeams });
+      const nextSelected =
+        refreshedTeams.find((team) => team.id === result.firstTeamId) ?? refreshedTeams[0] ?? null;
+
+      setSelectedTeamId(nextSelected?.id ?? null);
+      if (nextSelected) {
+        setTeam(nextSelected.id);
+        await queryClient.invalidateQueries({ queryKey: ['developers', nextSelected.id] });
+      }
+
+      console.log('Sample data loaded successfully', result);
+    } catch (error) {
+      console.error('Error loading sample data:', error);
+    } finally {
+      setIsLoadingSamples(false);
+    }
+  }
+
   return (
     <PageLayout title="Teams" subtitle="Create your team, tune capacity and move into sprint planning.">
       <section className="grid gap-6">
         <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
-          <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
+            <button
+              type="button"
+              className="rounded-lg bg-blue-500/85 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-600/85 disabled:opacity-50"
+              onClick={handleLoadSamples}
+              disabled={isLoadingSamples}
+              title="Load 2 sample teams (PayFlow & ShopHub) with developers and realistic epics"
+            >
+              {isLoadingSamples ? 'Loading...' : '⚡ Load Samples'}
+            </button>
+          </div>
           <form
             className="grid gap-3 sm:grid-cols-2"
             onSubmit={teamForm.handleSubmit((values) => {

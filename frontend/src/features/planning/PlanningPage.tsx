@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getMockPlanningDefaults } from '../../api/sprintApi';
+import { getMockPlanningDefaults, getSampleEpicsForPlanning } from '../../api/sprintApi';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -30,6 +30,7 @@ export function PlanningPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const { setSprint, setTeam } = usePlanningStore();
+  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const { developersQuery, planMutation } = usePlanning(teamId);
 
   const form = useForm<PlanningFormValues>({
@@ -117,7 +118,28 @@ const payload: PlanningRequest = {
           })}
         >
           <div>
-            <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
+            <div className="flex items-center justify-between">
+              <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
+              <button
+                type="button"
+                className="rounded-lg bg-blue-500/85 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
+                onClick={async () => {
+                  if (!teamId) return;
+                  setIsLoadingSamples(true);
+                  try {
+                    const defaults = await getSampleEpicsForPlanning(teamId);
+                    form.setValue('epicsText', defaults.epicsText);
+                    form.setValue('sprintGoal', defaults.sprintGoal);
+                  } finally {
+                    setIsLoadingSamples(false);
+                  }
+                }}
+                disabled={isLoadingSamples}
+                title="Load sample epics for this team"
+              >
+                {isLoadingSamples ? 'Loading...' : '⚡ Load Samples'}
+              </button>
+            </div>
             <EpicInput control={form.control} name="epicsText" />
           </div>
 

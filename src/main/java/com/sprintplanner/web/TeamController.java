@@ -10,7 +10,11 @@ import com.sprintplanner.web.dto.CreateTeamHttpRequest;
 import com.sprintplanner.web.dto.DeveloperHttpDto;
 import com.sprintplanner.web.dto.TeamHttpDto;
 import com.sprintplanner.web.dto.TeamMemoryResponse;
+import com.sprintplanner.web.dto.SeedSampleTeamsResponse;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -146,5 +150,79 @@ public class TeamController {
 
         memoryWriter.writeTeamProfile(teamId, "");
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/sample-data")
+    public ResponseEntity<SeedSampleTeamsResponse> seedSampleTeams() {
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isAdmin = SecurityUtils.isAdmin();
+
+        Map<String, Object[]> sampleTeams = new LinkedHashMap<>();
+        sampleTeams.put("PayFlow Team", new Object[] { "FINTECH", 10, "payflow-board" });
+        sampleTeams.put("ShopHub Team", new Object[] { "E_COMMERCE", 14, "shophub-board" });
+
+        Map<String, List<Object[]>> sampleDevelopers = new LinkedHashMap<>();
+        sampleDevelopers.put("PayFlow Team", List.of(
+            new Object[] { "Alex Chen", "Senior Backend Engineer", List.of("backend"), 13 },
+            new Object[] { "Jordan López", "Backend Engineer", List.of("backend"), 8 },
+            new Object[] { "Maya Patel", "Frontend Engineer", List.of("frontend"), 7 },
+            new Object[] { "Sam Wilson", "QA Engineer", List.of("qa"), 5 },
+            new Object[] { "Casey Kim", "DevOps Engineer", List.of("devops"), 6 }
+        ));
+        sampleDevelopers.put("ShopHub Team", List.of(
+            new Object[] { "Ava Rodriguez", "Frontend Lead", List.of("frontend"), 9 },
+            new Object[] { "Marcus Thompson", "Backend Engineer", List.of("backend"), 8 },
+            new Object[] { "Priya Singh", "Senior Backend Engineer", List.of("backend"), 11 },
+            new Object[] { "Liam OReilley", "QA Lead", List.of("qa"), 7 },
+            new Object[] { "Sophie Bergström", "Frontend Engineer", List.of("frontend"), 6 }
+        ));
+
+        int teamsCreated = 0;
+        int developersCreated = 0;
+        UUID firstTeamId = null;
+
+        for (Map.Entry<String, Object[]> entry : sampleTeams.entrySet()) {
+            String teamName = entry.getKey();
+            Object[] values = entry.getValue();
+            String domain = (String) values[0];
+            int sprintLengthDays = (Integer) values[1];
+            String trelloBoardId = (String) values[2];
+
+            var existingTeam = teamRepository.findAll().stream()
+                .filter(team -> teamName.equals(team.getName()))
+                .findFirst()
+                .orElse(null);
+
+            var team = existingTeam != null
+                ? existingTeam
+                : teamService.createTeam(teamName, domain, sprintLengthDays, trelloBoardId, currentUserId);
+
+            if (existingTeam == null) {
+                teamsCreated++;
+            }
+
+            if (firstTeamId == null) {
+                firstTeamId = team.getId();
+            }
+
+            var existingDeveloperNames = teamService.getDevelopers(team.getId(), currentUserId, isAdmin).stream()
+                .map(developer -> developer.getName())
+                .collect(java.util.stream.Collectors.toSet());
+
+            for (Object[] developerValues : sampleDevelopers.getOrDefault(teamName, List.of())) {
+                String developerName = (String) developerValues[0];
+                if (existingDeveloperNames.contains(developerName)) {
+                    continue;
+                }
+                String role = (String) developerValues[1];
+                @SuppressWarnings("unchecked")
+                List<String> capabilities = (List<String>) developerValues[2];
+                int baseVelocity = (Integer) developerValues[3];
+                teamService.addDeveloper(team.getId(), currentUserId, isAdmin, developerName, role, capabilities, baseVelocity);
+                developersCreated++;
+            }
+        }
+
+        return ResponseEntity.ok(new SeedSampleTeamsResponse(teamsCreated, developersCreated, firstTeamId == null ? null : firstTeamId.toString()));
     }
 }

@@ -1,5 +1,6 @@
 import api from './axios';
 import type { Developer, Team } from '../types/team';
+import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from './sampleData';
 
 export interface TeamCreateRequest {
   name: string;
@@ -185,3 +186,46 @@ export const removeDeveloper = (teamId: string, developerId: string) =>
         setMockDevelopers(nextDevelopers);
         return { status: 'SKIPPED_BACKEND_STEP_12', teamId, developerId };
       });
+
+/**
+ * Load sample teams and developers for rapid testing.
+ * All data is ephemeral - stored in localStorage, not persisted to backend.
+ * Useful for demo and testing workflows.
+ */
+export const loadSampleData = async () => {
+  if (USE_REAL_API) {
+    const response = await api.post<{ teamsCreated: number; developersCreated: number; firstTeamId?: string | null }>(
+      '/api/teams/sample-data',
+    );
+    return response.data;
+  }
+
+  const existingTeams = getMockTeams();
+
+  // Only add sample teams if they don't already exist
+  const teamsToAdd = SAMPLE_TEAMS.filter(
+    (sample) => !existingTeams.some((existing) => existing.id === sample.id)
+  );
+
+  if (teamsToAdd.length > 0) {
+    const updatedTeams = [...existingTeams, ...teamsToAdd];
+    setMockTeams(updatedTeams);
+  }
+
+  // Add sample developers for sample teams
+  const existingDevelopers = getMockDevelopers();
+  const developersToAdd = SAMPLE_DEVELOPERS.filter(
+    (sample) => !existingDevelopers.some((existing) => existing.id === sample.id)
+  );
+
+  if (developersToAdd.length > 0) {
+    const updatedDevelopers = [...existingDevelopers, ...developersToAdd];
+    setMockDevelopers(updatedDevelopers);
+  }
+
+  return {
+    teamsCreated: teamsToAdd.length,
+    developersCreated: developersToAdd.length,
+    firstTeamId: SAMPLE_TEAMS[0]?.id ?? null,
+  };
+};

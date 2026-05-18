@@ -1,5 +1,6 @@
 import api from './axios';
 import { getDevelopers } from './teamApi';
+import { getSampleEpicsForTeam, getSampleSprintGoal } from './sampleData';
 import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
@@ -234,3 +235,33 @@ export function getMockPlanningDefaults(teamId: string): Promise<MockPlanningDef
 
   return Promise.reject(new Error('Mock defaults not available in real API mode'));
 }
+
+/**
+ * Load sample epics for a team for rapid testing.
+ * Returns pre-configured epics matching the team's domain (Fintech or E-Commerce).
+ */
+export async function getSampleEpicsForPlanning(
+  teamId: string,
+): Promise<{
+  epicsText: string;
+  sprintGoal: string;
+  daysOff: Record<string, number>;
+}> {
+  const epics = getSampleEpicsForTeam(teamId);
+  const sprintGoal = getSampleSprintGoal(teamId);
+  const developers = await getDevelopers(teamId);
+
+  const epicsText = epics.map((epic) => `${epic.title} | ${epic.description}`).join('\n');
+
+  const daysOff: Record<string, number> = {};
+  developers.forEach((dev) => {
+    daysOff[dev.id] = 0; // No days off for sample data
+  });
+
+  return {
+    epicsText,
+    sprintGoal,
+    daysOff,
+  };
+}
+
