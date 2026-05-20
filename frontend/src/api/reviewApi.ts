@@ -7,38 +7,7 @@ export interface EditPayload {
   entityId: string;
   oldValue: string | number | boolean | null;
   newValue: string | number | boolean | null;
-}
-
-interface ReviewHttpDto {
-  id: string;
-  sprintId: string;
-  goalResult: SprintReviewRequest['goalResult'];
-  blockerNote: string;
-  totalPlannedPts: number;
-  totalCompletedPts: number;
-  submittedAt: string;
-  devCompletions: Array<{
-    id: string;
-    reviewId: string;
-    developerId: string;
-    plannedPts: number;
-    completedPts: number;
-  }>;
-}
-
-interface SubmitReviewHttpRequest {
-  teamId: string;
-  latestReview: ReviewHttpDto;
-  rollingWindowReviews: ReviewHttpDto[];
-  editLogs: Array<{
-    id: string;
-    sprintId: string;
-    field: string;
-    originalValue: string;
-    newValue: string;
-    taskType: string;
-    loggedAt: string;
-  }>;
+  taskType?: string;
 }
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
@@ -76,33 +45,23 @@ export const submitReview = (request: SprintReviewRequest) => {
     return Promise.resolve(buildMockReviewResult(request));
   }
 
-  const reviewId = crypto.randomUUID();
-  const latestReview: ReviewHttpDto = {
-    id: reviewId,
-    sprintId: request.sprintId,
-    goalResult: request.goalResult,
-    blockerNote: request.blockerNote ?? '',
-    totalPlannedPts: request.totalPlannedPts ?? 0,
-    totalCompletedPts: request.totalCompletedPts ?? 0,
-    submittedAt: new Date().toISOString(),
-    devCompletions: (request.devCompletions ?? []).map((completion) => ({
-      id: crypto.randomUUID(),
-      reviewId,
-      developerId: completion.developerId,
-      plannedPts: completion.plannedPts,
-      completedPts: completion.completedPts,
-    })),
-  };
-
-  const payload: SubmitReviewHttpRequest = {
-    teamId: request.teamId,
-    latestReview,
-    rollingWindowReviews: [latestReview],
-    editLogs: [],
-  };
-
-  return api.post('/api/reviews', payload).then((response) => response.data);
+  return api
+    .post('/api/reviews', {
+      teamId: request.teamId,
+      sprintId: request.sprintId,
+      goalResult: request.goalResult,
+      blockerNote: request.blockerNote ?? null,
+      taskCompletions: request.taskCompletions,
+      totalPlannedPts: request.totalPlannedPts ?? 0,
+      totalCompletedPts: request.totalCompletedPts ?? 0,
+    })
+    .then((response) => response.data);
 };
+
+function toStringValue(value: string | number | boolean | null): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
 
 export const logEdit = (sprintId: string, edit: EditPayload) => {
   const canonicalSprintId = normalizeSprintId(sprintId);
@@ -111,5 +70,13 @@ export const logEdit = (sprintId: string, edit: EditPayload) => {
     return Promise.resolve({ status: 'SKIPPED_BACKEND_STEP_12', sprintId: canonicalSprintId, edit });
   }
 
-  return api.post(`/api/sprints/${canonicalSprintId}/edits`, edit).then((response) => response.data);
+  return api
+    .post(`/api/sprints/${canonicalSprintId}/edits`, {
+      field: edit.field,
+      entityId: edit.entityId,
+      oldValue: toStringValue(edit.oldValue),
+      newValue: toStringValue(edit.newValue),
+      taskType: edit.taskType ?? 'UNKNOWN',
+    })
+    .then((response) => response.data);
 };

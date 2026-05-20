@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getMockPlanningDefaults, getSampleEpicsForPlanning } from '../../api/sprintApi';
@@ -19,19 +19,23 @@ interface PlanningFormValues {
   daysOff: Record<string, number>;
 }
 
-const progressSteps = [
-  'Breaking down epics...',
-  'Estimating points...',
-  'Calculating capacity...',
-  'Assigning tasks...',
-];
+const PHASE_LABEL: Record<string, string> = {
+  input: 'Setup',
+  memory: 'Memory',
+  breakdown: 'AI Breakdown',
+  estimation: 'AI Estimation',
+  capacity: 'Capacity',
+  distribution: 'AI Assignment',
+  done: 'Done',
+  error: 'Error',
+};
 
 export function PlanningPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const { setSprint, setTeam } = usePlanningStore();
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
-  const { developersQuery, planMutation } = usePlanning(teamId);
+  const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
 
   const form = useForm<PlanningFormValues>({
     defaultValues: {
@@ -61,17 +65,17 @@ export function PlanningPage() {
 
   const developers = developersQuery.data ?? [];
 
-  const loadingStep = useMemo(() => {
-    if (!planMutation.isPending) {
-      return null;
-    }
-    const elapsed = Date.now() - (planMutation.submittedAt ?? Date.now());
-    const stepIndex = Math.min(Math.floor(elapsed / 3500), progressSteps.length - 1);
-    return progressSteps[stepIndex];
-  }, [planMutation.isPending, planMutation.submittedAt]);
-
   return (
     <PageLayout title="Planning" subtitle="Feed epics and constraints, then generate a sprint plan draft.">
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => navigate('/teams')}
+          className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+        >
+          ← Back to Teams
+        </button>
+      </div>
       <section className="grid gap-6 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         <form
           className="space-y-4"
@@ -182,8 +186,42 @@ const payload: PlanningRequest = {
           </button>
         </form>
 
-        {planMutation.isPending && loadingStep ? <LoadingSpinner label={loadingStep} /> : null}
-        {planMutation.isError ? <ErrorBanner message="Failed to generate sprint plan." /> : null}
+        {planMutation.isPending && planningSteps.length === 0 ? (
+          <LoadingSpinner label="Connecting to AI pipeline..." />
+        ) : null}
+
+        {planningSteps.length > 0 ? (
+          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-sm">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pipeline Log</p>
+            <ul className="space-y-1.5">
+              {planningSteps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className={
+                    step.error
+                      ? 'text-red-400'
+                      : step.done
+                        ? 'text-emerald-400'
+                        : 'text-sky-400'
+                  }>
+                    {step.error ? '✗' : step.done ? '✓' : '›'}
+                  </span>
+                  <span className="text-slate-300">
+                    <span className="text-slate-500">[{PHASE_LABEL[step.phase] ?? step.phase}]</span>{' '}
+                    {step.message}
+                  </span>
+                </li>
+              ))}
+              {planMutation.isPending ? (
+                <li className="flex items-center gap-2 text-slate-500">
+                  <span className="animate-pulse">›</span>
+                  <span>Working...</span>
+                </li>
+              ) : null}
+            </ul>
+          </div>
+        ) : null}
+
+        {planMutation.isError ? <ErrorBanner message="Failed to generate sprint plan." error={planMutation.error} /> : null}
       </section>
     </PageLayout>
   );

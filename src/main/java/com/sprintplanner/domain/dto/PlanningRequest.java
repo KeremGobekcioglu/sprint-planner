@@ -9,6 +9,7 @@ import java.util.UUID;
  */
 public record PlanningRequest(
     UUID teamId,
+    UUID userId,
     List<Epic> epics,
     String domain,           // E_COMMERCE | FINTECH | GENERIC
     String sprintGoal,

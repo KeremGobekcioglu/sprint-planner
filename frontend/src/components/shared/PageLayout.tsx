@@ -31,14 +31,19 @@ export function PageLayout({ title, subtitle, actions, children }: PageLayoutPro
             </div>
             <div className="flex items-center gap-2">
               {isAuthenticated && email ? (
-                <div className="mr-2 flex items-center gap-2 rounded-full border border-slate-500/40 bg-slate-800/70 px-3 py-1 text-xs text-slate-200">
+                <button
+                  type="button"
+                  onClick={() => navigate('/profile')}
+                  className="mr-2 flex items-center gap-2 rounded-full border border-slate-500/40 bg-slate-800/70 px-3 py-1 text-xs text-slate-200 hover:border-slate-300/50 hover:bg-slate-700/70"
+                  title="View profile"
+                >
                   <span>{email}</span>
                   {role ? (
                     <span className="rounded-full bg-sky-500/20 px-2 py-0.5 font-semibold text-sky-200">
                       {role}
                     </span>
                   ) : null}
-                </div>
+                </button>
               ) : null}
               {actions}
               {isAuthenticated ? (

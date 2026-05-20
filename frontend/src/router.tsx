@@ -5,6 +5,7 @@ import { TeamSetupPage } from './features/team-setup/TeamSetupPage';
 import { PlanningPage } from './features/planning/PlanningPage';
 import { ReviewPage } from './features/review/ReviewPage';
 import { SprintClosePage } from './features/sprint-close/SprintClosePage';
+import { ProfilePage } from './features/profile/ProfilePage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 
 export const router = createBrowserRouter([
@@ -49,6 +50,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <SprintClosePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/profile',
+    element: (
+      <ProtectedRoute>
+        <ProfilePage />
       </ProtectedRoute>
     ),
   },

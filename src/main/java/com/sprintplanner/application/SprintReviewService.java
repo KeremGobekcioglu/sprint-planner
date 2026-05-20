@@ -1,7 +1,6 @@
 package com.sprintplanner.application;
 
 import com.sprintplanner.domain.model.DevCompletion;
-import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.SprintReview;
 import com.sprintplanner.domain.port.out.SprintRepository;
@@ -25,15 +24,18 @@ public class SprintReviewService {
     private final SprintRepository sprintRepository;
     private final SprintReviewJpaRepository sprintReviewJpaRepository;
     private final DevCompletionJpaRepository devCompletionJpaRepository;
+    private final ReferenceBuilder referenceBuilder;
 
     public SprintReviewService(
         SprintRepository sprintRepository,
         SprintReviewJpaRepository sprintReviewJpaRepository,
-        DevCompletionJpaRepository devCompletionJpaRepository
+        DevCompletionJpaRepository devCompletionJpaRepository,
+        ReferenceBuilder referenceBuilder
     ) {
         this.sprintRepository = sprintRepository;
         this.sprintReviewJpaRepository = sprintReviewJpaRepository;
         this.devCompletionJpaRepository = devCompletionJpaRepository;
+        this.referenceBuilder = referenceBuilder;
     }
 
     /**
@@ -43,7 +45,7 @@ public class SprintReviewService {
      * - compute per-developer planned/completed points
      * - persist SprintReview and DevCompletion rows
      * - mark sprint COMPLETED and save
-     * NOTE: This method intentionally does NOT trigger ReferenceBuilder/PreferenceService.
+     * - trigger ReferenceBuilder to update sprint_history.md
      */
     public void submitReview(SprintReviewRequest request) {
         if (request == null) throw new IllegalArgumentException("request is required");
@@ -53,6 +55,11 @@ public class SprintReviewService {
 
         Sprint sprint = sprintRepository.findWithStoriesAndTasksById(sprintId)
             .orElseThrow(() -> new IllegalArgumentException("Sprint not found: " + sprintId));
+
+        boolean reviewExists = sprintReviewJpaRepository.existsBySprintId(sprintId);
+        if (reviewExists) {
+            throw new IllegalStateException("Sprint " + sprintId + " has already been reviewed.");
+        }
 
         Map<String, Boolean> taskCompletions = request.taskCompletions() == null ? Map.of() : request.taskCompletions();
 
@@ -125,14 +132,19 @@ public class SprintReviewService {
 
         if (!devCompletions.isEmpty()) {
             devCompletionJpaRepository.saveAll(devCompletions);
-            // also attach to review in-memory
-            review.setDevCompletions(devCompletions);
-            sprintReviewJpaRepository.save(review);
         }
 
         // Mark sprint completed and attach review
         sprint.setStatus(Sprint.Status.COMPLETED);
         sprint.setSprintReview(review);
         sprintRepository.save(sprint);
+
+        // Update sprint history memory for this team
+        UUID teamId = sprint.getTeamId();
+        List<SprintReview> teamReviews = sprintRepository.findByTeamIdWithReviews(teamId).stream()
+            .map(Sprint::getSprintReview)
+            .filter(r -> r != null)
+            .toList();
+        referenceBuilder.updateSprintHistory(teamId, teamReviews);
     }
 }

@@ -37,19 +37,26 @@ public class GeminiClientProvider {
         Exception lastException = null;
 
         for (String model : chain) {
+            long start = System.currentTimeMillis();
+            log.info("Gemini [{}] calling — prompt={}ch, temperature={}", model, prompt.length(), temperature);
             try {
                 GenerateContentConfig config = GenerateContentConfig.builder()
                         .temperature(temperature)
                         .build();
                 String result = client.models.generateContent(model, prompt, config).text();
-                log.debug("=== GEMINI [{}] ===\nPROMPT:\n{}\nRESPONSE:\n{}", model, prompt, result);
+                long elapsed = System.currentTimeMillis() - start;
+                log.info("Gemini [{}] OK — {}ms | response={}ch", model, elapsed, result == null ? 0 : result.length());
+                log.debug("Gemini [{}] full response:\n{}", model, result);
                 return result;
 
             } catch (Exception e) {
+                long elapsed = System.currentTimeMillis() - start;
                 lastException = e;
                 if (!isRetryable(e)) {
+                    log.error("Gemini [{}] non-retryable error after {}ms: {}", model, elapsed, e.getMessage());
                     throw new RuntimeException("Non-retryable Gemini error on model " + model, e);
                 }
+                log.warn("Gemini [{}] retryable error after {}ms ({}), trying next model...", model, elapsed, e.getMessage());
                 sleep(2000);
             }
         }

@@ -2,6 +2,7 @@ package com.sprintplanner.infrastructure.persistence;
 
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.port.out.SprintRepository;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,7 +38,25 @@ public class JpaSprintRepository implements SprintRepository {
     }
 
     @Override
+    public List<Sprint> findByTeamIdWithReviews(UUID teamId) {
+        return sprintJpaRepository.findByTeamIdWithReviews(teamId);
+    }
+
+    @Override
     public long countCompletedByTeamId(UUID teamId) {
         return sprintJpaRepository.countByTeamIdAndStatus(teamId, Sprint.Status.COMPLETED);
+    }
+
+    @Override
+    public List<Sprint> findActiveForTeams(List<UUID> teamIds) {
+        if (teamIds == null || teamIds.isEmpty()) {
+            return List.of();
+        }
+        List<Sprint.Status> activeStatuses = Arrays.asList(
+            Sprint.Status.PLANNING,
+            Sprint.Status.IN_REVIEW,
+            Sprint.Status.ACTIVE
+        );
+        return sprintJpaRepository.findByTeamIdInAndStatusIn(teamIds, activeStatuses);
     }
 }

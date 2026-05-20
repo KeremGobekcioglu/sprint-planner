@@ -11,13 +11,20 @@ import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.DistributionPort;
 import com.sprintplanner.domain.port.out.EstimationPort;
 import com.sprintplanner.domain.port.out.MemoryReader;
+import com.sprintplanner.domain.port.out.ProgressPort;
+import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PlanningOrchestrator implements PlanningInputPort {
+
+    private static final Logger log = LoggerFactory.getLogger(PlanningOrchestrator.class);
 
     private final BreakdownPort breakdownPort;
     private final EstimationPort estimationPort;
@@ -26,6 +33,8 @@ public class PlanningOrchestrator implements PlanningInputPort {
     private final TeamRepository teamRepository;
     private final DeveloperRepository developerRepository;
     private final MemoryReader memoryReader;
+    private final SprintRepository sprintRepository;
+    private final ProgressPort progressPort;
 
     public PlanningOrchestrator(
         BreakdownPort breakdownPort,
@@ -34,7 +43,9 @@ public class PlanningOrchestrator implements PlanningInputPort {
         DistributionPort distributionPort,
         TeamRepository teamRepository,
         DeveloperRepository developerRepository,
-        MemoryReader memoryReader
+        MemoryReader memoryReader,
+        SprintRepository sprintRepository,
+        ProgressPort progressPort
     ) {
         this.breakdownPort = breakdownPort;
         this.estimationPort = estimationPort;
@@ -43,51 +54,96 @@ public class PlanningOrchestrator implements PlanningInputPort {
         this.teamRepository = teamRepository;
         this.developerRepository = developerRepository;
         this.memoryReader = memoryReader;
+        this.sprintRepository = sprintRepository;
+        this.progressPort = progressPort;
     }
-    private void sleep(long ms) {
-        try { Thread.sleep(ms); }
-        catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-    }
+
     @Override
     public SprintPlan planSprint(PlanningRequest request) {
         validateRequest(request);
+        UUID userId = request.userId();
 
-        Team team = teamRepository.findById(request.teamId())
-            .orElseThrow(() -> new IllegalArgumentException("Team not found: " + request.teamId()));
+        try {
+            if (userId != null) progressPort.start(userId);
 
-        String teamProfileMemory = memoryReader.readTeamProfile(request.teamId());
-        String sprintHistoryMemory = memoryReader.readSprintHistory(request.teamId());
+            push(userId, "input", "Validating request and loading team data...");
+            Team team = teamRepository.findById(request.teamId())
+                .orElseThrow(() -> new IllegalArgumentException("Team not found: " + request.teamId()));
 
-        List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, sprintHistoryMemory);
-        sleep(1500);
-        List<UserStory> estimated = estimationPort.estimate(brokenDown, sprintHistoryMemory);
-        sleep(1500);
-        var developers = developerRepository.findByTeamId(request.teamId());
-        Map<java.util.UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
-            developers,
-            team.getSprintLengthDays(),
-            request.daysOff() == null ? Map.of() : request.daysOff(),
-            sprintHistoryMemory
-        );
-        Map<java.util.UUID, List<String>> developerCapabilities = developers.stream()
-            .collect(java.util.stream.Collectors.toMap(
-                com.sprintplanner.domain.model.Developer::getId,
-                developer -> developer.getCapabilities().isEmpty()
-                    ? inferCapabilitiesFromRole(developer.getRole())
-                    : developer.getCapabilities(),
-                (a, b) -> a,
-                java.util.LinkedHashMap::new
-            ));
+            boolean hasPriorHistory = sprintRepository.countCompletedByTeamId(request.teamId()) > 0;
+            if (hasPriorHistory) {
+                push(userId, "memory", "Loading team preferences and sprint history...");
+            } else {
+                push(userId, "memory", "No prior sprint history — starting fresh.");
+            }
 
-        return distributionPort.distribute(
-            request.teamId(),
-            request.sprintGoal(),
-            estimated,
-            capacityByDeveloper,
-            developerCapabilities,
-            teamProfileMemory,
-            sprintHistoryMemory
-        );
+            String teamProfileMemory = hasPriorHistory ? memoryReader.readTeamProfile(request.teamId()) : "";
+            String sprintHistoryMemory = hasPriorHistory ? memoryReader.readSprintHistory(request.teamId()) : "";
+
+            int epicCount = request.epics() == null ? 0 : request.epics().size();
+            push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
+            log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
+            List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, sprintHistoryMemory);
+            int storyCount = brokenDown.size();
+            int taskCount = brokenDown.stream().mapToInt(s -> s.getTasks() == null ? 0 : s.getTasks().size()).sum();
+            push(userId, "breakdown", "Breakdown complete: " + storyCount + " stories, " + taskCount + " tasks.");
+            log.info("[Planning] teamId={} — breakdown done: {} stories, {} tasks", request.teamId(), storyCount, taskCount);
+
+            push(userId, "estimation", "Estimating story points for " + taskCount + " tasks...");
+            log.info("[Planning] teamId={} — estimation start", request.teamId());
+            List<UserStory> estimated = estimationPort.estimate(brokenDown, sprintHistoryMemory);
+            int totalPoints = estimated.stream().mapToInt(s -> s.getTasks() == null ? 0 :
+                s.getTasks().stream().mapToInt(t -> t.getStoryPoints()).sum()).sum();
+            push(userId, "estimation", "Estimation done: " + totalPoints + " total story points.");
+            log.info("[Planning] teamId={} — estimation done: {} total points", request.teamId(), totalPoints);
+
+            var developers = developerRepository.findByTeamId(request.teamId());
+            push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
+            Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
+                developers,
+                team.getSprintLengthDays(),
+                request.daysOff() == null ? Map.of() : request.daysOff(),
+                sprintHistoryMemory
+            );
+            int totalCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
+            push(userId, "capacity", "Capacity ready: " + totalCapacity + " available story points across team.");
+            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), totalCapacity, developers.size());
+
+            Map<UUID, List<String>> developerCapabilities = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    com.sprintplanner.domain.model.Developer::getId,
+                    developer -> developer.getCapabilities().isEmpty()
+                        ? inferCapabilitiesFromRole(developer.getRole())
+                        : developer.getCapabilities(),
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
+            push(userId, "distribution", "Assigning " + taskCount + " tasks to " + developers.size() + " developer(s)...");
+            log.info("[Planning] teamId={} — distribution start", request.teamId());
+            SprintPlan result = distributionPort.distribute(
+                request.teamId(),
+                request.sprintGoal(),
+                estimated,
+                capacityByDeveloper,
+                developerCapabilities,
+                teamProfileMemory,
+                sprintHistoryMemory
+            );
+            log.info("[Planning] teamId={} — distribution done", request.teamId());
+
+            if (userId != null) progressPort.complete(userId);
+            return result;
+
+        } catch (Exception e) {
+            log.error("[Planning] teamId={} — pipeline failed: {}", request.teamId(), e.getMessage(), e);
+            if (userId != null) progressPort.fail(userId, "Pipeline error: " + e.getMessage());
+            throw e;
+        }
+    }
+
+    private void push(UUID userId, String phase, String message) {
+        if (userId != null) progressPort.push(userId, phase, message);
     }
 
     private List<String> inferCapabilitiesFromRole(String roleLabel) {

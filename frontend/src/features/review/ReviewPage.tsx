@@ -48,6 +48,8 @@ export function ReviewPage() {
 
   const hasReviewedAllWarnings = warnings.every((warning) => dismissedWarnings.includes(warning.type));
 
+  const teamId = planQuery.data?.teamId;
+
   return (
     <PageLayout
       title="Review"
@@ -84,9 +86,24 @@ export function ReviewPage() {
         </button>
       }
     >
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => navigate(teamId ? `/teams/${teamId}/plan` : '/teams')}
+          className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+        >
+          ← Back to Planning
+        </button>
+      </div>
       <section className="space-y-5">
         {planQuery.isLoading ? <LoadingSpinner label="Loading sprint review..." /> : null}
         {planQuery.isError ? <ErrorBanner message="Could not load the sprint plan." /> : null}
+        {approveMutation.isError ? (
+          <ErrorBanner message="Failed to approve the plan." error={approveMutation.error} />
+        ) : null}
+        {pushTrelloMutation.isError ? (
+          <ErrorBanner message="Failed to push plan to Trello." error={pushTrelloMutation.error} />
+        ) : null}
         {!planQuery.isLoading && !planQuery.data ? (
           <ErrorBanner message="Sprint data is not available. Generate a plan again before opening review." />
         ) : null}
@@ -128,6 +145,7 @@ export function ReviewPage() {
                   entityId: taskId,
                   oldValue,
                   newValue: targetDeveloperId,
+                  taskType: 'assignment',
                 };
                 addEdit(edit);
                 logEditMutation.mutate({ id: effectiveSprintId, edit });
@@ -139,6 +157,7 @@ export function ReviewPage() {
                   entityId: taskId,
                   oldValue,
                   newValue,
+                  taskType: field === 'storyPoints' ? 'estimation' : 'UNKNOWN',
                 };
                 addEdit(edit);
                 logEditMutation.mutate({ id: effectiveSprintId, edit });
@@ -151,6 +170,7 @@ export function ReviewPage() {
                   entityId: taskId,
                   oldValue: false,
                   newValue: true,
+                  taskType: 'deferred',
                 };
                 addEdit(edit);
                 logEditMutation.mutate({ id: effectiveSprintId, edit });

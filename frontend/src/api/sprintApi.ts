@@ -1,6 +1,6 @@
 import api from './axios';
-import { getDevelopers } from './teamApi';
-import { getSampleEpicsForTeam, getSampleSprintGoal } from './sampleData';
+import { getDevelopers, getTeams } from './teamApi';
+import { getSampleEpicsForTeam, getSampleSprintGoal, SAMPLE_EPICS_PAYFLOW, SAMPLE_EPICS_SHOPHUB } from './sampleData';
 import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
@@ -240,6 +240,34 @@ export function getMockPlanningDefaults(teamId: string): Promise<MockPlanningDef
  * Load sample epics for a team for rapid testing.
  * Returns pre-configured epics matching the team's domain (Fintech or E-Commerce).
  */
+export interface ActiveSprintResponse {
+  sprintId: string;
+  status: string;
+}
+
+export const getActiveSprint = (): Promise<ActiveSprintResponse | null> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve(null);
+  }
+  return api
+    .get<ActiveSprintResponse>('/api/sprints/active')
+    .then((r) => (r.status === 204 || !r.data ? null : r.data))
+    .catch(() => null);
+};
+
+export interface PlanningStep {
+  phase: string;
+  message: string;
+  at: string;
+  done: boolean;
+  error: boolean;
+}
+
+export const getPlanningStatus = (): Promise<PlanningStep[]> => {
+  if (!USE_REAL_API) return Promise.resolve([]);
+  return api.get<PlanningStep[]>('/api/sprints/plan/status').then((r) => r.data ?? []);
+};
+
 export async function getSampleEpicsForPlanning(
   teamId: string,
 ): Promise<{
@@ -247,8 +275,26 @@ export async function getSampleEpicsForPlanning(
   sprintGoal: string;
   daysOff: Record<string, number>;
 }> {
-  const epics = getSampleEpicsForTeam(teamId);
-  const sprintGoal = getSampleSprintGoal(teamId);
+  // Try to detect the team's domain and return domain-appropriate sample epics.
+  // If the team is one of the explicit sample teams we still return their dedicated epics.
+  const teams = await getTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  let epics = getSampleEpicsForTeam(teamId);
+  if ((!epics || epics.length === 0) && team) {
+    if (team.domain === 'FINTECH') {
+      epics = SAMPLE_EPICS_PAYFLOW;
+    } else if (team.domain === 'E_COMMERCE') {
+      epics = SAMPLE_EPICS_SHOPHUB;
+    }
+  }
+
+  const sprintGoal = getSampleSprintGoal(teamId) || (team?.domain === 'FINTECH'
+    ? 'Deliver core fintech capabilities this sprint'
+    : team?.domain === 'E_COMMERCE'
+    ? 'Ship e-commerce improvements and reduce friction'
+    : 'Complete planned features on schedule');
+
   const developers = await getDevelopers(teamId);
 
   const epicsText = epics.map((epic) => `${epic.title} | ${epic.description}`).join('\n');

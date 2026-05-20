@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -16,6 +16,7 @@ interface CloseFormValues {
 
 export function SprintClosePage() {
   const { sprintId } = useParams();
+  const navigate = useNavigate();
   const { planQuery, submitMutation } = useSprintClose(sprintId);
   const [submitted, setSubmitted] = useState(false);
   const effectiveSprintId = planQuery.data?.sprintId ?? sprintId;
@@ -66,9 +67,23 @@ export function SprintClosePage() {
 
   return (
     <PageLayout title="Sprint Close" subtitle="Capture completion and goal outcome to close the sprint.">
+      {!submitted ? (
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => navigate(`/sprints/${sprintId}/review`)}
+            className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+          >
+            ← Back to Review
+          </button>
+        </div>
+      ) : null}
       <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         {planQuery.isLoading ? <LoadingSpinner label="Loading sprint tasks..." /> : null}
         {planQuery.isError ? <ErrorBanner message="Could not load sprint tasks for closeout." /> : null}
+        {submitMutation.isError ? (
+          <ErrorBanner message="Failed to submit the sprint review." error={submitMutation.error} />
+        ) : null}
 
         {!submitted ? (
           <form
@@ -153,7 +168,7 @@ export function SprintClosePage() {
 
             <button
               className="rounded-lg bg-ink px-4 py-2 font-semibold text-white"
-              disabled={submitMutation.isPending || !planQuery.data?.teamId}
+              disabled={submitMutation.isPending || submitted || !planQuery.data?.teamId}
             >
               {submitMutation.isPending ? 'Submitting...' : 'Submit Review'}
             </button>

@@ -4,5 +4,8 @@ import com.sprintplanner.domain.model.SprintReview;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface SprintReviewJpaRepository extends JpaRepository<SprintReview, UUID> {}
+public interface SprintReviewJpaRepository extends JpaRepository<SprintReview, UUID> {
+
+    boolean existsBySprintId(UUID sprintId);
+}
 

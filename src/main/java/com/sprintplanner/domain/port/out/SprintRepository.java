@@ -18,5 +18,9 @@ public interface SprintRepository {
 
     List<Sprint> findByTeamId(UUID teamId);
 
+    List<Sprint> findByTeamIdWithReviews(UUID teamId);
+
     long countCompletedByTeamId(UUID teamId);
+
+    List<Sprint> findActiveForTeams(List<UUID> teamIds);
 }

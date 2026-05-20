@@ -9,9 +9,12 @@ import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
+import com.sprintplanner.application.PreferenceService;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
 import com.sprintplanner.domain.port.out.EditLogRepository;
 import com.sprintplanner.domain.port.out.SprintRepository;
+import com.sprintplanner.domain.port.out.TeamRepository;
+import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import java.time.Instant;
@@ -42,17 +45,25 @@ public class SprintPlannerController {
     private final PlanningInputPort planningInputPort;
     private final SprintRepository sprintRepository;
     private final EditLogRepository editLogRepository;
+    private final TeamRepository teamRepository;
+    private final PreferenceService preferenceService;
+    private final PlanningProgressStore progressStore;
 
-    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository, EditLogRepository editLogRepository) {
+    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository, EditLogRepository editLogRepository, TeamRepository teamRepository, PreferenceService preferenceService, PlanningProgressStore progressStore) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
         this.editLogRepository = editLogRepository;
+        this.teamRepository = teamRepository;
+        this.preferenceService = preferenceService;
+        this.progressStore = progressStore;
     }
 
     @PostMapping("/plan")
     public ResponseEntity<SprintPlan> planSprint(@RequestBody PlanSprintHttpRequest request) {
+        UUID currentUserId = SecurityUtils .getCurrentUserId();
         PlanningRequest planningRequest = new PlanningRequest(
             request.teamId(),
+            currentUserId,
             request.epics() == null
                 ? List.of()
                 : request.epics().stream().map(epic -> new Epic(epic.title(), epic.description())).toList(),
@@ -116,6 +127,31 @@ public class SprintPlannerController {
         return ResponseEntity.ok(planWithId);
     }
 
+    @GetMapping("/active")
+    public ResponseEntity<Map<String, String>> getActiveSprint() {
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isAdmin = SecurityUtils.isAdmin();
+
+        List<UUID> teamIds = isAdmin
+            ? teamRepository.findAll().stream().map(team -> team.getId()).toList()
+            : teamRepository.findByOwnerId(currentUserId).stream().map(team -> team.getId()).toList();
+
+        List<Sprint> activeSprints = sprintRepository.findActiveForTeams(teamIds);
+        if (activeSprints.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+
+        Sprint active = activeSprints.get(0);
+        return ResponseEntity.ok(Map.of("sprintId", active.getId().toString(), "status", active.getStatus().name()));
+    }
+
+    @GetMapping("/plan/status")
+    public ResponseEntity<List<PlanningProgressStore.Step>> getPlanningStatus() {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        List<PlanningProgressStore.Step> steps = progressStore.get(userId);
+        return ResponseEntity.ok(steps);
+    }
+
     @GetMapping("/{sprintId}/plan")
     public ResponseEntity<SprintPlan> getSprintPlan(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
@@ -135,7 +171,11 @@ public class SprintPlannerController {
         sprint.setStatus(Sprint.Status.ACTIVE);
         sprint.setReviewedAt(Instant.now());
         sprintRepository.save(sprint);
-        
+
+        // Rebuild team_profile.md from accumulated edit logs
+        var editLogs = editLogRepository.findBySprintId(normalizedSprintId);
+        preferenceService.updateTeamProfile(sprint.getTeamId(), editLogs);
+
         return ResponseEntity.ok("Sprint approved and moved to ACTIVE.");
     }
 

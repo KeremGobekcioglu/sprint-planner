@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
+import { NoticeBanner } from '../../components/shared/NoticeBanner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
 import { createDeveloper, createTeam, getTeams, loadSampleData } from '../../api/teamApi';
+import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
@@ -29,6 +31,13 @@ export function TeamSetupPage() {
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
+
+  const activeSprintQuery = useQuery({
+    queryKey: ['active-sprint'],
+    queryFn: getActiveSprint,
+    staleTime: 1000 * 60 * 2,
+    retry: false,
+  });
 
   const teamForm = useForm<TeamFormValues>({
     defaultValues: {
@@ -71,6 +80,18 @@ export function TeamSetupPage() {
 
   return (
     <PageLayout title="Teams" subtitle="Create your team, tune capacity and move into sprint planning.">
+      {activeSprintQuery.data ? (
+        <div className="mb-4">
+          <NoticeBanner
+            title="You have an active sprint"
+            message={`Sprint ${activeSprintQuery.data.sprintId.slice(0, 8)}… is currently ${activeSprintQuery.data.status.toLowerCase().replace('_', ' ')}.`}
+            action={{
+              label: 'Continue review →',
+              onClick: () => navigate(`/sprints/${activeSprintQuery.data!.sprintId}/review`),
+            }}
+          />
+        </div>
+      ) : null}
       <section className="grid gap-6">
         <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
           <div className="flex items-center justify-between">
