@@ -14,6 +14,8 @@ import com.sprintplanner.infrastructure.config.GeminiConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,6 +26,8 @@ import java.util.UUID;
 @Component
 @Primary
 public class GeminiBreakdownAdapter implements BreakdownPort {
+
+    private static final Logger logger = LoggerFactory.getLogger(GeminiBreakdownAdapter.class);
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
@@ -39,6 +43,19 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             String teamProfileMemory,
             String sprintHistoryMemory
     ) {
+        if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
+            logger.info("[BREAKDOWN] Team profile memory loaded ({} chars): ...{}",
+                teamProfileMemory.length(),
+                teamProfileMemory.substring(0, Math.min(200, teamProfileMemory.length())));
+        } else {
+            logger.info("[BREAKDOWN] No team profile memory — fresh start mode");
+        }
+
+        if (sprintHistoryMemory != null && !sprintHistoryMemory.isBlank()) {
+            logger.info("[BREAKDOWN] Sprint history memory loaded ({} chars)", sprintHistoryMemory.length());
+        } else {
+            logger.info("[BREAKDOWN] No sprint history memory");
+        }
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         if (epics.isEmpty()) return List.of();
 

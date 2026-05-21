@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -34,6 +35,7 @@ public class ProfileService {
         this.sprintRepository = sprintRepository;
     }
 
+    @Transactional(readOnly = true)
     public ProfileResponse getProfile(UUID userId) {
         AppUser user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -69,6 +71,7 @@ public class ProfileService {
         );
     }
 
+    @Transactional(readOnly = true)
     public ProfileStatsResponse getStats(UUID userId) {
         List<Sprint> allSprints = teamRepository.findByOwnerId(userId).stream()
             .flatMap(team -> sprintRepository.findByTeamId(team.getId()).stream())
@@ -95,6 +98,7 @@ public class ProfileService {
         );
     }
 
+    @Transactional
     public void updateName(UUID userId, String name) {
         AppUser user = userRepository.findById(userId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));

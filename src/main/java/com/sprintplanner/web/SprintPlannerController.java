@@ -13,6 +13,7 @@ import com.sprintplanner.application.PreferenceService;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
 import com.sprintplanner.domain.port.out.EditLogRepository;
 import com.sprintplanner.domain.port.out.SprintRepository;
+import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
@@ -44,14 +45,16 @@ public class SprintPlannerController {
 
     private final PlanningInputPort planningInputPort;
     private final SprintRepository sprintRepository;
+    private final MemoryReader memoryReader;
     private final EditLogRepository editLogRepository;
     private final TeamRepository teamRepository;
     private final PreferenceService preferenceService;
     private final PlanningProgressStore progressStore;
 
-    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository, EditLogRepository editLogRepository, TeamRepository teamRepository, PreferenceService preferenceService, PlanningProgressStore progressStore) {
+    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository, MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository, PreferenceService preferenceService, PlanningProgressStore progressStore) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
+        this.memoryReader = memoryReader;
         this.editLogRepository = editLogRepository;
         this.teamRepository = teamRepository;
         this.preferenceService = preferenceService;
@@ -150,6 +153,22 @@ public class SprintPlannerController {
         UUID userId = SecurityUtils.getCurrentUserId();
         List<PlanningProgressStore.Step> steps = progressStore.get(userId);
         return ResponseEntity.ok(steps);
+    }
+
+    @GetMapping("/teams/{teamId}/planning-mode")
+    public ResponseEntity<Map<String, Object>> getPlanningMode(@PathVariable UUID teamId) {
+        long completedSprints = sprintRepository.countCompletedByTeamId(teamId);
+        String teamProfile = memoryReader.readTeamProfile(teamId);
+        String sprintHistory = memoryReader.readSprintHistory(teamId);
+
+        Map<String, Object> body = Map.of(
+            "mode", completedSprints > 0 ? "CONTINUOUS" : "FRESH",
+            "completedSprints", completedSprints,
+            "hasTeamProfile", teamProfile != null && !teamProfile.isBlank(),
+            "hasSprintHistory", sprintHistory != null && !sprintHistory.isBlank()
+        );
+
+        return ResponseEntity.ok(body);
     }
 
     @GetMapping("/{sprintId}/plan")

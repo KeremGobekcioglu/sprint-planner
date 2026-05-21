@@ -1,7 +1,9 @@
 package com.sprintplanner.application;
 
 import com.sprintplanner.domain.model.DevCompletion;
+import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.SprintReview;
+import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.MemoryWriter;
 import java.time.Instant;
 import java.util.Comparator;
@@ -13,9 +15,11 @@ import org.springframework.stereotype.Service;
 public class ReferenceBuilder {
 
     private final MemoryWriter memoryWriter;
+    private final DeveloperRepository developerRepository;
 
-    public ReferenceBuilder(MemoryWriter memoryWriter) {
+    public ReferenceBuilder(MemoryWriter memoryWriter, DeveloperRepository developerRepository) {
         this.memoryWriter = memoryWriter;
+        this.developerRepository = developerRepository;
     }
 
     public void updateSprintHistory(UUID teamId, List<SprintReview> reviews) {
@@ -51,8 +55,12 @@ public class ReferenceBuilder {
             if (review.getDevCompletions() != null && !review.getDevCompletions().isEmpty()) {
                 builder.append("- Developer completion:").append(System.lineSeparator());
                 for (DevCompletion completion : review.getDevCompletions()) {
+                    String displayName = developerRepository.findById(completion.getDeveloperId())
+                        .map(Developer::getName)
+                        .orElse(completion.getDeveloperId().toString());
+
                     builder.append("  - ")
-                        .append(completion.getDeveloperId())
+                        .append(displayName)
                         .append(" planned ")
                         .append(completion.getPlannedPts())
                         .append(", completed ")

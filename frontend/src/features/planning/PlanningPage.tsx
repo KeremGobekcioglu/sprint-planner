@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getMockPlanningDefaults, getSampleEpicsForPlanning } from '../../api/sprintApi';
+import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode } from '../../api/sprintApi';
+import { useQuery } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -36,6 +37,30 @@ export function PlanningPage() {
   const { setSprint, setTeam } = usePlanningStore();
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
+  const planningModeQuery = useQuery({
+    queryKey: ['planningMode', teamId],
+    queryFn: () => getPlanningMode(teamId as string),
+    enabled: Boolean(teamId),
+  });
+
+  const modeStep = planningModeQuery.data
+    ? (() => {
+        const d: any = planningModeQuery.data as any;
+        let message = '';
+        if (d.mode === 'FRESH') {
+          message = '🆕 Fresh start — building from scratch';
+        } else {
+          if (d.hasTeamProfile) {
+            message = `🧠 Continuous mode — ${d.completedSprints} prior sprints loaded, team preferences active`;
+          } else {
+            message = `📊 Continuous mode — ${d.completedSprints} prior sprints, preferences not yet generated`;
+          }
+        }
+        return { phase: 'mode', message, at: new Date().toISOString(), done: true, error: false } as any;
+      })()
+    : null;
+
+  const pipelineEntries = modeStep ? [modeStep, ...planningSteps] : planningSteps;
 
   const form = useForm<PlanningFormValues>({
     defaultValues: {
@@ -122,6 +147,15 @@ const payload: PlanningRequest = {
           })}
         >
           <div>
+            {planningModeQuery.data ? (
+              <div className="mb-3 flex items-center gap-2">
+                {(planningModeQuery.data as any).mode === 'FRESH' ? (
+                  <span className="rounded-full bg-blue-500/90 px-3 py-1 text-xs font-semibold text-white">Fresh Start — no prior history</span>
+                ) : (
+                  <span className="rounded-full bg-emerald-600/90 px-3 py-1 text-xs font-semibold text-white">Continuous — {(planningModeQuery.data as any).completedSprints} sprints completed</span>
+                )}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between">
               <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
               <button
@@ -194,7 +228,7 @@ const payload: PlanningRequest = {
           <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-sm">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pipeline Log</p>
             <ul className="space-y-1.5">
-              {planningSteps.map((step, i) => (
+              {pipelineEntries.map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className={
                     step.error

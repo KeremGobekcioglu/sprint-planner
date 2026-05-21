@@ -255,6 +255,15 @@ export const getActiveSprint = (): Promise<ActiveSprintResponse | null> => {
     .catch(() => null);
 };
 
+export const getPlanningMode = async (teamId: string) => {
+  if (!USE_REAL_API) {
+    // Mock: return FRESH if no completed sprints in mock data, else CONTINUOUS
+    return { mode: 'FRESH', completedSprints: 0, hasTeamProfile: false, hasSprintHistory: false } as const;
+  }
+  const response = await api.get(`/api/sprints/teams/${teamId}/planning-mode`);
+  return response.data;
+};
+
 export interface PlanningStep {
   phase: string;
   message: string;

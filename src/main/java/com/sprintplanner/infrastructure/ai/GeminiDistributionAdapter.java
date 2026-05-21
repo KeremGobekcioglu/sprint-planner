@@ -13,12 +13,16 @@ import com.sprintplanner.domain.port.out.DistributionPort;
 import com.sprintplanner.infrastructure.config.GeminiConfig;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @Component
 @Primary
 public class GeminiDistributionAdapter implements DistributionPort {
+
+    private static final Logger logger = LoggerFactory.getLogger(GeminiDistributionAdapter.class);
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
@@ -38,6 +42,19 @@ public class GeminiDistributionAdapter implements DistributionPort {
             String teamProfileMemory,
             String sprintHistoryMemory
     ) {
+        if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
+            logger.info("[DISTRIBUTION] Team profile memory loaded ({} chars): ...{}",
+                teamProfileMemory.length(),
+                teamProfileMemory.substring(0, Math.min(200, teamProfileMemory.length())));
+        } else {
+            logger.info("[DISTRIBUTION] No team profile memory — fresh start mode");
+        }
+
+        if (sprintHistoryMemory != null && !sprintHistoryMemory.isBlank()) {
+            logger.info("[DISTRIBUTION] Sprint history memory loaded ({} chars)", sprintHistoryMemory.length());
+        } else {
+            logger.info("[DISTRIBUTION] No sprint history memory");
+        }
         if (estimatedUserStories == null || estimatedUserStories.isEmpty()) {
             return new SprintPlan(teamId, sprintGoal, List.of(), List.of());
         }
