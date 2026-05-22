@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 public class StubBreakdownAdapter implements BreakdownPort {
 
     @Override
-    public List<UserStory> breakdown(PlanningRequest request, String teamProfileMemory, String sprintHistoryMemory) {
+    public List<UserStory> breakdown(PlanningRequest request, String teamProfileMemory, String sprintHistoryMemory, int totalCapacity) {
         List<UserStory> stories = new ArrayList<>();
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
 

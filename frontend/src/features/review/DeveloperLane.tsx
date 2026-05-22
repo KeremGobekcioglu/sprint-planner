@@ -15,7 +15,10 @@ interface DeveloperLaneProps {
 
 export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, stories }: DeveloperLaneProps) {
   const points = tasks.reduce((sum, task) => sum + task.storyPoints, 0);
-  const indicator = points > capacity ? 'text-red-700' : points > capacity * 0.8 ? 'text-amber-700' : 'text-pine';
+  const indicator = points > capacity ? 'text-red-500' : points > capacity * 0.8 ? 'text-amber-500' : 'text-green-500';
+  const isUnassigned = developerId === 'unassigned';
+  const fillPercent = Math.min(100, capacity > 0 ? (points / capacity) * 100 : 0);
+  const barColor = points > capacity ? 'bg-red-500' : points > capacity * 0.8 ? 'bg-amber-500' : 'bg-green-500';
 
   return (
     <section
@@ -29,11 +32,23 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
         }
       }}
     >
-      <header className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-slate-100">{developerLabel}</h3>
-        <p className={`text-xs font-bold ${indicator}`}>
-          {points}/{capacity} pts
-        </p>
+      <header className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h3 className={`text-base font-semibold ${isUnassigned ? 'text-red-400' : 'text-slate-100'}`}>{developerLabel}</h3>
+          {!isUnassigned && (
+            <p className={`text-xs font-bold ${indicator}`}>
+              {points} / {capacity} pts
+            </p>
+          )}
+        </div>
+        {!isUnassigned && (
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700">
+            <div
+              className={`h-full rounded-full transition-all ${barColor}`}
+              style={{ width: `${fillPercent}%` }}
+            />
+          </div>
+        )}
       </header>
       <div className="space-y-2">
         {useMemo(() => {

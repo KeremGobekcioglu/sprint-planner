@@ -16,6 +16,7 @@ export function ReviewPage() {
   const { dismissedWarnings, dismissWarning, deferTask, addEdit, reset } = useReviewStore();
   const { planQuery, developersQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const effectiveSprintId = planQuery.data?.sprintId;
 
   const stories = planQuery.data?.userStories ?? [];
@@ -43,8 +44,26 @@ export function ReviewPage() {
       laneTasks.push({ ...task, assignedDevId: effectiveOwner });
       laneMap.set(effectiveOwner, laneTasks);
     }
-    return Array.from(laneMap.entries());
+    return Array.from(laneMap.entries()).sort(([a], [b]) => {
+      if (a === 'unassigned') return 1;
+      if (b === 'unassigned') return -1;
+      return 0;
+    });
   }, [allTasks, overrides]);
+
+  const epicGroups = useMemo(() => {
+    const groups: Record<string, typeof stories> = {};
+    for (const story of stories) {
+      if (!groups[story.epicTitle]) groups[story.epicTitle] = [];
+      groups[story.epicTitle].push(story);
+    }
+    return Object.entries(groups);
+  }, [stories]);
+
+  const devNameMap = useMemo(
+    () => new Map((developersQuery.data ?? []).map((d) => [d.id, d.name])),
+    [developersQuery.data],
+  );
 
   const hasReviewedAllWarnings = warnings.every((warning) => dismissedWarnings.includes(warning.type));
 
@@ -118,6 +137,53 @@ export function ReviewPage() {
             />
           ))}
         </div>
+
+        {planQuery.data && epicGroups.length > 0 && (
+          <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-left"
+              onClick={() => setSprintPlanCollapsed((c) => !c)}
+            >
+              <span className="text-sm font-semibold text-slate-200">Sprint Plan</span>
+              <span className="text-xs text-slate-400">{sprintPlanCollapsed ? '▶ Show' : '▼ Hide'}</span>
+            </button>
+            {!sprintPlanCollapsed && (
+              <div className="mt-4 space-y-4">
+                {epicGroups.map(([epicTitle, epicStories]) => (
+                  <div key={epicTitle}>
+                    <p className="mb-2 text-sm font-bold text-slate-100">▼ Epic: {epicTitle}</p>
+                    <div className="space-y-3 pl-3">
+                      {epicStories.map((story) => (
+                        <div key={story.id}>
+                          <p className="mb-1 text-xs font-semibold text-slate-300">
+                            ▼ {story.title}{' '}
+                            <span className="font-normal text-slate-500">
+                              ({story.storyPoints} pts · {story.status})
+                            </span>
+                          </p>
+                          <div className="space-y-0.5 pl-3">
+                            {story.tasks.map((task) => {
+                              const devName = devNameMap.get(task.assignedDevId ?? '') ?? null;
+                              return (
+                                <div key={task.id} className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+                                  <span>- {task.title}</span>
+                                  <span className={devName ? 'text-slate-300' : 'text-red-400'}>
+                                    [{devName ?? 'Unassigned'} · {task.roleTag} · {task.storyPoints}pts]
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {lanes.map(([developerId, tasks]) => (

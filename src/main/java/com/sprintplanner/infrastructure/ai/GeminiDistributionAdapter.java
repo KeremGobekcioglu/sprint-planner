@@ -325,7 +325,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             }
         }
 
-        return fallback;
+        return fallbackRemaining > 0 ? fallback : null;
     }
 
     private Map<String, List<UUID>> buildRoleMap(Map<UUID, List<String>> developerCapabilities) {

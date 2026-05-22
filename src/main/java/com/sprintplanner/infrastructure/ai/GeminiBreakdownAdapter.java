@@ -41,7 +41,8 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
     public List<UserStory> breakdown(
             PlanningRequest request,
             String teamProfileMemory,
-            String sprintHistoryMemory
+            String sprintHistoryMemory,
+            int totalCapacity
     ) {
         if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
             logger.info("[BREAKDOWN] Team profile memory loaded ({} chars): ...{}",
@@ -60,7 +61,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         if (epics.isEmpty()) return List.of();
 
         // ONE call for all epics
-        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory);
+        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity);
         String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
         List<UserStory> stories = parseResponse(raw, epics);
 
@@ -155,7 +156,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         return sb.toString();
     }
     private String buildBatchPrompt(List<Epic> epics, PlanningRequest request,
-                                    String teamProfile, String sprintHistory) {
+                                    String teamProfile, String sprintHistory, int totalCapacity) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("You are an expert agile sprint planner. Break down ALL epics below into user stories and tasks.\n\n");
@@ -197,6 +198,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             );
         }
         sb.append("\n");
+
+        sb.append("## Capacity Constraint\n");
+        sb.append("Total team capacity for this sprint: ").append(totalCapacity).append(" story points.\n");
+        sb.append("Generate tasks whose total estimated effort stays within this budget.\n");
+        sb.append("Assume backend tasks ~5pts, frontend ~3pts, qa ~2pts, devops ~3pts.\n");
+        sb.append("Produce fewer stories per epic if needed — quality over quantity.\n");
+        sb.append("Do NOT generate more work than the team can complete.\n\n");
 
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");

@@ -2,6 +2,7 @@ package com.sprintplanner.application;
 
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
@@ -80,10 +81,13 @@ public class PlanningOrchestrator implements PlanningInputPort {
             String teamProfileMemory = hasPriorHistory ? memoryReader.readTeamProfile(request.teamId()) : "";
             String sprintHistoryMemory = hasPriorHistory ? memoryReader.readSprintHistory(request.teamId()) : "";
 
+            var developers = developerRepository.findByTeamId(request.teamId());
+            int totalCapacity = developers.stream().mapToInt(Developer::getBaseVelocity).sum();
+
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
             log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
-            List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, sprintHistoryMemory);
+            List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, sprintHistoryMemory, totalCapacity);
             int storyCount = brokenDown.size();
             int taskCount = brokenDown.stream().mapToInt(s -> s.getTasks() == null ? 0 : s.getTasks().size()).sum();
             push(userId, "breakdown", "Breakdown complete: " + storyCount + " stories, " + taskCount + " tasks.");
@@ -97,7 +101,6 @@ public class PlanningOrchestrator implements PlanningInputPort {
             push(userId, "estimation", "Estimation done: " + totalPoints + " total story points.");
             log.info("[Planning] teamId={} — estimation done: {} total points", request.teamId(), totalPoints);
 
-            var developers = developerRepository.findByTeamId(request.teamId());
             push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
             Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
                 developers,
@@ -105,9 +108,9 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 request.daysOff() == null ? Map.of() : request.daysOff(),
                 sprintHistoryMemory
             );
-            int totalCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
-            push(userId, "capacity", "Capacity ready: " + totalCapacity + " available story points across team.");
-            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), totalCapacity, developers.size());
+            int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
+            push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
+            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), adjustedCapacity, developers.size());
 
             Map<UUID, List<String>> developerCapabilities = developers.stream()
                 .collect(java.util.stream.Collectors.toMap(
