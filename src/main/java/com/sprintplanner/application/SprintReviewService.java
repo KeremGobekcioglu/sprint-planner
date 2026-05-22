@@ -134,9 +134,8 @@ public class SprintReviewService {
             devCompletionJpaRepository.saveAll(devCompletions);
         }
 
-        // Mark sprint completed and attach review
+        // Mark sprint completed
         sprint.setStatus(Sprint.Status.COMPLETED);
-        sprint.setSprintReview(review);
         sprintRepository.save(sprint);
 
         // Update sprint history memory for this team

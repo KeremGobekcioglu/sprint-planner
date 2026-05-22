@@ -13,7 +13,7 @@ import { useReview } from './useReview';
 export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
-  const { dismissedWarnings, dismissWarning, deferTask, addEdit, reset } = useReviewStore();
+  const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
   const { planQuery, developersQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
@@ -43,6 +43,10 @@ export function ReviewPage() {
       const laneTasks = laneMap.get(effectiveOwner) ?? [];
       laneTasks.push({ ...task, assignedDevId: effectiveOwner });
       laneMap.set(effectiveOwner, laneTasks);
+    }
+    // Always keep the unassigned lane when plan data is loaded so tasks can be dragged back
+    if (allTasks.length > 0 && !laneMap.has('unassigned')) {
+      laneMap.set('unassigned', []);
     }
     return Array.from(laneMap.entries()).sort(([a], [b]) => {
       if (a === 'unassigned') return 1;
@@ -185,7 +189,7 @@ export function ReviewPage() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 pb-32 md:grid-cols-2 xl:grid-cols-3">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
               key={developerId}
@@ -229,18 +233,20 @@ export function ReviewPage() {
                 logEditMutation.mutate({ id: effectiveSprintId, edit });
               }}
               onDefer={(taskId) => {
-                deferTask(taskId);
+                const currentDeferred = isDeferred(taskId);
+                toggleDeferred(taskId);
                 if (!effectiveSprintId) return;
                 const edit = {
                   field: 'deferred',
                   entityId: taskId,
-                  oldValue: false,
-                  newValue: true,
+                  oldValue: currentDeferred,
+                  newValue: !currentDeferred,
                   taskType: 'deferred',
                 };
                 addEdit(edit);
                 logEditMutation.mutate({ id: effectiveSprintId, edit });
               }}
+              isDeferred={isDeferred}
             />
           ))}
         </div>
