@@ -197,11 +197,8 @@ export const approvePlan = (sprintId: string) => {
   return api.post(`/api/sprints/${canonicalSprintId}/approve`).then((response) => response.data);
 };
 
-export const pushPlanToTrello = async (sprintId: string) => {
-  return Promise.resolve({
-    sprintId,
-    message: 'Done - mocked Trello push completed.',
-  });
+export const pushPlanToTrello = async (sprintId: string): Promise<void> => {
+  await api.post(`/api/sprints/${normalizeSprintId(sprintId)}/trello-push`);
 };
 
 export interface MockPlanningDefaults {

@@ -14,7 +14,7 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
-  const { planQuery, developersQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
+  const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const effectiveSprintId = planQuery.data?.sprintId;
@@ -59,7 +59,7 @@ export function ReviewPage() {
     const groups: Record<string, typeof stories> = {};
     for (const story of stories) {
       if (!groups[story.epicTitle]) groups[story.epicTitle] = [];
-      groups[story.epicTitle].push(story);
+      groups[story.epicTitle]!.push(story);
     }
     return Object.entries(groups);
   }, [stories]);
@@ -72,41 +72,51 @@ export function ReviewPage() {
   const hasReviewedAllWarnings = warnings.every((warning) => dismissedWarnings.includes(warning.type));
 
   const teamId = planQuery.data?.teamId;
+  const hasTrelloBoard = Boolean(teamQuery.data?.trelloBoardId);
 
   return (
     <PageLayout
       title="Review"
       subtitle="Inspect, edit and rebalance the plan before pushing anything to Trello."
       actions={
-        <button
-          className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={
-            !planQuery.data ||
-            !hasReviewedAllWarnings ||
-            approveMutation.isPending ||
-            pushTrelloMutation.isPending ||
-            !effectiveSprintId
-          }
-          onClick={() => {
-            if (!effectiveSprintId) return;
-            approveMutation.mutate(effectiveSprintId, {
-              onSuccess: () => {
-                pushTrelloMutation.mutate(effectiveSprintId, {
+        pushTrelloMutation.isSuccess ? (
+          <span className="rounded-lg bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-300">
+            Pushed to Trello ✓
+          </span>
+        ) : (
+          <span title={!hasTrelloBoard && teamQuery.data !== undefined ? 'Link a Trello board in team setup first' : undefined}>
+            <button
+              className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={
+                !planQuery.data ||
+                !hasReviewedAllWarnings ||
+                approveMutation.isPending ||
+                pushTrelloMutation.isPending ||
+                !effectiveSprintId ||
+                !hasTrelloBoard
+              }
+              onClick={() => {
+                if (!effectiveSprintId) return;
+                approveMutation.mutate(effectiveSprintId, {
                   onSuccess: () => {
-                    reset();
-                    navigate(`/sprints/${effectiveSprintId}/close`);
+                    pushTrelloMutation.mutate(effectiveSprintId, {
+                      onSuccess: () => {
+                        reset();
+                        navigate(`/sprints/${effectiveSprintId}/close`);
+                      },
+                    });
                   },
                 });
-              },
-            });
-          }}
-        >
-          {approveMutation.isPending
-            ? 'Approving...'
-            : pushTrelloMutation.isPending
-              ? 'Pushing to Trello...'
-              : 'Approve & Push to Trello'}
-        </button>
+              }}
+            >
+              {approveMutation.isPending
+                ? 'Approving...'
+                : pushTrelloMutation.isPending
+                  ? 'Pushing to Trello...'
+                  : 'Approve & Push to Trello'}
+            </button>
+          </span>
+        )
       }
     >
       <div className="mb-4">

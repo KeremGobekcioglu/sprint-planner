@@ -192,6 +192,26 @@ export const removeDeveloper = (teamId: string, developerId: string) =>
  * All data is ephemeral - stored in localStorage, not persisted to backend.
  * Useful for demo and testing workflows.
  */
+export const getTeam = (teamId: string): Promise<Team | null> =>
+  USE_REAL_API
+    ? api.get<Team>(`/api/teams/${teamId}`).then((response) => response.data)
+    : Promise.resolve(getMockTeams().find((team) => team.id === teamId) ?? null);
+
+export const linkTrelloBoard = (teamId: string, boardId: string): Promise<Team> =>
+  USE_REAL_API
+    ? api.put<Team>(`/api/teams/${teamId}/trello-board`, { boardId }).then((response) => response.data)
+    : Promise.resolve(
+        (() => {
+          const teams = getMockTeams();
+          const updated = teams.map((t) => (t.id === teamId ? { ...t, trelloBoardId: boardId } : t));
+          setMockTeams(updated);
+          return updated.find((t) => t.id === teamId)!;
+        })(),
+      );
+
+export const getTrelloBoards = (): Promise<{ id: string; name: string }[]> =>
+  api.get<{ id: string; name: string }[]>('/api/teams/trello/boards').then((response) => response.data);
+
 export const loadSampleData = async () => {
   if (USE_REAL_API) {
     const response = await api.post<{ teamsCreated: number; developersCreated: number; firstTeamId?: string | null }>(

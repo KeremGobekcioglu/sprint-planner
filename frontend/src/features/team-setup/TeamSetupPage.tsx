@@ -1,14 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { NoticeBanner } from '../../components/shared/NoticeBanner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
-import { createDeveloper, createTeam, getTeams, loadSampleData } from '../../api/teamApi';
+import { createDeveloper, createTeam, getTrelloBoards, getTeams, linkTrelloBoard, loadSampleData } from '../../api/teamApi';
 import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
@@ -29,8 +29,26 @@ export function TeamSetupPage() {
   const queryClient = useQueryClient();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
+  const [trelloBoardInput, setTrelloBoardInput] = useState('');
+  const [selectedBoardId, setSelectedBoardId] = useState('');
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
+
+  const trelloBoardsQuery = useQuery({
+    queryKey: ['trello-boards'],
+    queryFn: getTrelloBoards,
+    enabled: false,
+    retry: false,
+  });
+
+  const linkBoardMutation = useMutation({
+    mutationFn: ({ teamId, boardId }: { teamId: string; boardId: string }) => linkTrelloBoard(teamId, boardId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teams'] });
+      setTrelloBoardInput('');
+      setSelectedBoardId('');
+    },
+  });
 
   const activeSprintQuery = useQuery({
     queryKey: ['active-sprint'],
@@ -186,6 +204,85 @@ export function TeamSetupPage() {
 
           {selectedTeam ? (
             <>
+              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
+                <p className="text-sm font-semibold text-slate-200">Trello Board</p>
+                {selectedTeam.trelloBoardId ? (
+                  <p className="text-xs text-slate-400">
+                    Currently linked: <span className="font-mono text-slate-300">{selectedTeam.trelloBoardId}</span>
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500">No Trello board linked yet.</p>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 disabled:opacity-50"
+                    onClick={() => trelloBoardsQuery.refetch()}
+                    disabled={trelloBoardsQuery.isFetching}
+                  >
+                    {trelloBoardsQuery.isFetching ? 'Fetching...' : 'Fetch my Trello boards'}
+                  </button>
+                </div>
+                {trelloBoardsQuery.isError ? (
+                  <ErrorBanner message="Could not fetch Trello boards. Check that TRELLO_API_KEY and TRELLO_TOKEN are set." />
+                ) : null}
+                {trelloBoardsQuery.data && trelloBoardsQuery.data.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      className="w-full rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+                      value={selectedBoardId}
+                      onChange={(e) => setSelectedBoardId(e.target.value)}
+                    >
+                      <option value="">— select a board —</option>
+                      {trelloBoardsQuery.data.map((board) => (
+                        <option key={board.id} value={board.id}>
+                          {board.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={!selectedBoardId || linkBoardMutation.isPending}
+                      onClick={() => {
+                        if (selectedBoardId) {
+                          linkBoardMutation.mutate({ teamId: selectedTeam.id, boardId: selectedBoardId });
+                        }
+                      }}
+                    >
+                      {linkBoardMutation.isPending ? 'Linking...' : 'Link selected board'}
+                    </button>
+                  </div>
+                ) : null}
+                <div className="flex gap-2 items-center">
+                  <input
+                    className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm bg-slate-900 text-slate-200 placeholder:text-slate-500"
+                    placeholder="Or paste board ID manually"
+                    value={trelloBoardInput}
+                    onChange={(e) => setTrelloBoardInput(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    disabled={!trelloBoardInput.trim() || linkBoardMutation.isPending}
+                    onClick={() => {
+                      const boardId = trelloBoardInput.trim();
+                      if (boardId) {
+                        linkBoardMutation.mutate({ teamId: selectedTeam.id, boardId });
+                      }
+                    }}
+                  >
+                    Link
+                  </button>
+                </div>
+                {linkBoardMutation.isError ? (
+                  <ErrorBanner message="Failed to link Trello board." error={linkBoardMutation.error} />
+                ) : null}
+                {linkBoardMutation.isSuccess ? (
+                  <p className="text-xs text-emerald-400">Board linked successfully.</p>
+                ) : null}
+              </div>
+
               <DeveloperForm
                 isSubmitting={createDeveloperMutation.isPending}
                 onSubmit={(values) => {

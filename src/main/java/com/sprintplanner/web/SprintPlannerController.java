@@ -1,5 +1,6 @@
 package com.sprintplanner.web;
 
+import com.sprintplanner.application.PreferenceService;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
@@ -8,14 +9,15 @@ import com.sprintplanner.domain.dto.UserStoryDto;
 import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.Task;
+import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.model.UserStory;
-import com.sprintplanner.application.PreferenceService;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
 import com.sprintplanner.domain.port.out.EditLogRepository;
-import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.MemoryReader;
+import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
+import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import java.time.Instant;
@@ -50,8 +52,12 @@ public class SprintPlannerController {
     private final TeamRepository teamRepository;
     private final PreferenceService preferenceService;
     private final PlanningProgressStore progressStore;
+    private final TrelloPlanPublisher trelloPlanPublisher;
 
-    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository, MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository, PreferenceService preferenceService, PlanningProgressStore progressStore) {
+    public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository,
+            MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository,
+            PreferenceService preferenceService, PlanningProgressStore progressStore,
+            TrelloPlanPublisher trelloPlanPublisher) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
         this.memoryReader = memoryReader;
@@ -59,6 +65,7 @@ public class SprintPlannerController {
         this.teamRepository = teamRepository;
         this.preferenceService = preferenceService;
         this.progressStore = progressStore;
+        this.trelloPlanPublisher = trelloPlanPublisher;
     }
 
     @PostMapping("/plan")
@@ -212,6 +219,24 @@ public class SprintPlannerController {
         );
         editLogRepository.save(log);
         return ResponseEntity.ok("Edit logged.");
+    }
+
+    @PostMapping("/{sprintId}/trello-push")
+    public ResponseEntity<String> pushToTrello(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found"));
+
+        Team team = teamRepository.findById(sprint.getTeamId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
+
+        if (team.getTrelloBoardId() == null || team.getTrelloBoardId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No Trello board linked to this team. Link a board in team setup first.");
+        }
+
+        trelloPlanPublisher.publishSprint(normalizedSprintId, team.getTrelloBoardId());
+        return ResponseEntity.ok("Sprint pushed to Trello successfully");
     }
 
     private UUID normalizeSprintId(String rawSprintId) {
