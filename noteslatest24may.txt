@@ -1,0 +1,468 @@
+
+prompt 2 output.
+
+● Both backend and frontend compile without errors. Here's the complete summary:
+
+
+
+
+  ---
+  Files changed
+
+  Backend
+
+  src/main/java/com/sprintplanner/domain/dto/SprintPlan.java
+  - Added String sprintStatus field to the record so the sprint lifecycle status
+  travels with the plan response.
+
+  src/main/java/com/sprintplanner/domain/dto/SprintPlanMapper.java
+  - toSprintPlan() now passes sprint.getStatus().name() for the new field.
+
+  src/main/java/com/sprintplanner/infrastructure/ai/GeminiDistributionAdapter.java
+  - Both new SprintPlan(...) call sites updated to pass null (AI pipeline doesn't own
+   a status).
+
+  src/main/java/com/sprintplanner/infrastructure/ai/StubDistributionAdapter.java
+  - Same null fix for the one call site.
+
+  src/main/java/com/sprintplanner/domain/port/out/SprintRepository.java
+  - Added void deleteById(UUID sprintId) to the port interface.
+
+  src/main/java/com/sprintplanner/infrastructure/persistence/JpaSprintRepository.java
+  - Implemented deleteById() by delegating to the JPA repo.
+
+  src/main/java/com/sprintplanner/web/SprintPlannerController.java
+  - Added DeleteMapping import.
+  - planSprint() now includes "PLANNING" in the planWithId construction.
+  - New DELETE /{sprintId} endpoint: normalizes ID, 404 if sprint missing, 403 if
+  team not owned by current user, 400 if status is ACTIVE/COMPLETED, then deletes.
+
+  Frontend
+
+  frontend/src/types/planning.ts
+  - Added sprintStatus?: string to SprintPlan (inherited by SprintPlanWithId).
+
+  frontend/src/api/sprintApi.ts
+  - Added deleteSprint(sprintId): no-op in mock mode, DELETE /api/sprints/:id in real
+   mode.
+
+  frontend/src/components/shared/ConfirmDialog.tsx
+  - Added destructive?: boolean prop; confirm button turns red when set.
+
+  frontend/src/features/planning/PlanningPage.tsx
+  - Added planGenerated state.
+  - onSuccess now sets planGenerated = true and calls setTimeout(() =>
+  navigate('/dashboard'), 2000) instead of immediately navigating to review.
+  - Button disabled and labeled "Sprint Generated ✓" during the 2-second window and
+  beyond.
+  - Inline success message rendered when planGenerated is true.
+
+  frontend/src/features/review/ReviewPage.tsx
+  - Imports useMutation, deleteSprint, ConfirmDialog.
+  - Added deleteDialogOpen state and deleteMutation.
+  - "Discard Sprint" button rendered in the actions bar only when
+  planQuery.data?.sprintStatus === 'PLANNING'; shows "Deleting..." during the call.
+  - ConfirmDialog with destructive styling, message "This will permanently delete the
+   sprint plan. This cannot be undone.", and navigation to /dashboard on confirm.
+  - Delete error banner rendered inline in the page body.
+
+propmt 3 :
+
+Files changed
+
+  Created
+
+  frontend/src/components/shared/Navbar.tsx (new)
+  - Sticky top navbar with frosted-glass background (bg-slate-900/80
+  backdrop-blur-xl)
+  - Brand "Sprint Planner" on the left
+  - Desktop nav links (Dashboard → /dashboard, Teams → /teams) with NavLink
+  active-state highlighting — hidden on mobile
+  - Avatar circle with first letter of user's name, colored via
+  var(--color-background-info) / var(--color-text-info); user's display name always
+  visible next to it
+  - Clicking avatar/name toggles a dropdown with Profile, Settings (disabled + "Soon"
+   badge), divider, and Logout (calls authStore.logout() + clears react-query cache +
+   navigates to /login)
+  - mousedown listener on document closes the dropdown on outside click
+  - Hamburger (☰ / ✕) visible only below md breakpoint; toggles an inline vertical
+  drawer with the same nav links
+
+  Modified
+
+  frontend/src/components/shared/PageLayout.tsx
+  - Replaced the old inline header (which contained email, role badge, logout button,
+   useNavigate, useQueryClient) with a <Navbar /> render at the top of the layout
+  - Page-level title, subtitle, and actions remain in the card-style header below the
+   navbar — no other consumer changes needed
+
+  frontend/src/main.css
+  - Added two CSS custom properties to :root:
+    - --color-background-info: rgba(56, 189, 248, 0.18) — translucent sky-blue for
+  the avatar background
+    - --color-text-info: rgb(56, 189, 248) — sky-blue for the avatar letter
+
+  Compilation
+
+  tsc --noEmit exits cleanly with zero errors.rewrite
+
+  project md update:
+
+  PROJECT_MAP.md has been written with all 12 sections. The diagnostic warnings are
+    informational-only from a Markdown linter about table column width alignment — they
+     don't affect how the tables render in any Markdown viewer.
+
+    The document covers:
+    1. Project Overview — stack, purpose, current state
+    2. Repository Structure — depth-3 directory tree
+    3. Backend File Responsibilities — every Java file grouped by package
+    4. Frontend File Responsibilities — every .tsx/.ts file grouped by type
+    5. API Endpoint Reference — all 29 endpoints with method, path, auth,
+    request/response
+    6. Database Schema — Mermaid ERD + written description of all 9 tables from
+    migrations V1–V7
+    7. Data Flow — all 4 flows (planning pipeline, review→close, auth, Trello push)
+    8. Environment Variables — all backend and frontend env vars with defaults
+    9. Migration History — V1 through V7 table
+    10. Feature Status — 25 features with ✅/🔧/❌   status
+    11. Known Issues — 14 concrete issues found during the file read (dead code, bugs,
+    stubs)
+    12. Quick Reference — cheat sheet of stack, design decisions, file locations, and
+    gotchas
+
+
+    prompt 4 :
+
+     Files Changed
+
+      Backend
+
+      File: src/main/java/com/sprintplanner/domain/dto/PlanningRequest.java
+      What changed: Added String previousSprintContext as the 7th record field (nullable,
+
+        with doc comment clarifying it is never persisted).
+      ────────────────────────────────────────
+      File: src/main/java/com/sprintplanner/web/dto/PlanSprintHttpRequest.java
+      What changed: Added String previousSprintContext to the HTTP request record so
+        Jackson deserializes it from the POST body.
+      ────────────────────────────────────────
+      File: src/main/java/com/sprintplanner/web/SprintPlannerController.java
+      What changed: Passes request.previousSprintContext() as the 7th argument when
+        constructing PlanningRequest.
+      ────────────────────────────────────────
+      File: src/main/java/com/sprintplanner/application/PlanningOrchestrator.java
+      What changed: After loading sprintHistoryMemory, computes effectiveSprintHistory:
+      if
+        persistent history is blank and previousSprintContext is non-blank, uses the
+        import as a one-time substitute. All four pipeline calls (breakdown, estimate,
+        calculateCapacity, distribute) now receive effectiveSprintHistory instead of
+        sprintHistoryMemory. Nothing is written to disk.
+
+      Frontend
+
+      File: frontend/src/types/planning.ts
+      What changed: Added previousSprintContext?: string to the PlanningRequest
+      interface.
+      ────────────────────────────────────────
+      File: frontend/src/features/planning/PlanningPage.tsx
+      What changed: Part 6A: Removed the inline mode badge; added a standalone info panel
+
+        above the section card — blue-tinted for Fresh Start, teal-tinted for Continuous
+        with a "View Memory →" link to /profile#memory. Part 6B: Added
+        previousSprintContext + importOpen state; added a collapsible "Import Previous
+        Sprint History" section (rendered only in Fresh Start mode) with a textarea and a
+
+        .txt/.md file upload that populates the textarea client-side; included
+        previousSprintContext in the submit payload when non-empty.
+
+      Compilation
+
+      - TypeScript: zero errors (tsc --noEmit exits clean)
+      - Java (Maven): zero errors (./mvnw compile -q exits clean)
+
+    ✻ Cooked for 4m 17s
+
+    ❯ what about part 6b?
+
+    ● Let me read the notes file the user just opened, and also re-verify the Part 6B
+      implementation is complete.
+
+      Read 1 file (ctrl+o to expand)
+
+    ● Part 6B was fully implemented in my previous response. Here's what was done for
+      each of the four required items:
+
+      Frontend (items 1 & 2):
+
+      - Collapsible section — PlanningPage.tsx has importOpen state; the section renders
+      only when isFresh is true (Fresh Start mode). The toggle button shows ▲/▼.
+      - Textarea — Has the exact placeholder text from the spec. Controlled by
+      previousSprintContext state.
+      - File upload — accept=".txt,.md", onChange runs a FileReader that populates the
+      textarea with the file's text content.
+      - Payload — At submit time, previousSprintContext is spread into the payload only
+      when non-empty: ...(previousSprintContext.trim() ? { previousSprintContext:
+      previousSprintContext.trim() } : {}).
+
+      Backend (items 3 & 4):
+
+      - PlanningRequest record — String previousSprintContext added as the 7th field.
+      - PlanningOrchestrator — After loading sprintHistoryMemory, computes
+      effectiveSprintHistory: substitutes previousSprintContext only when
+      sprintHistoryMemory is blank and previousSprintContext is non-blank.
+      effectiveSprintHistory is then passed to all four pipeline calls (breakdown,
+      estimate, calculateCapacity, distribute). Nothing is written to disk. No prompt
+      text in any Gemini adapter was modified.
+
+      The notes file you opened is from a prior session — it doesn't affect any of this.
+      Would you like me to verify anything specific about the implementation?
+
+    ✻ Cogitated for 36s
+
+
+    prompt 5:
+
+      Files Changed
+
+      Created
+
+      ┌──────────────────────────────────────────────────────┬────────────────────────┐
+      │                         File                         │       What it is       │
+      ├──────────────────────────────────────────────────────┼────────────────────────┤
+      │                                                      │ New record (id,        │
+      │ src/.../infrastructure/external/TrelloMemberDto.java │ fullName, username) —  │
+      │                                                      │ Trello API member      │
+      │                                                      │ shape                  │
+      ├──────────────────────────────────────────────────────┼────────────────────────┤
+      │                                                      │ New record             │
+      │ src/.../web/dto/LinkTrelloMemberRequest.java         │ (trelloMemberId) —     │
+      │                                                      │ request body for the   │
+      │                                                      │ PUT endpoint           │
+      └──────────────────────────────────────────────────────┴────────────────────────┘
+
+      Modified (Backend)
+
+      File: TrelloApiClient.java
+      What changed: createCard() gains a 4th String trelloMemberId param — when non-null,
+
+        appends &idMembers= to the card URL. New getBoardMembers(boardId) method: GET
+        /boards/{boardId}/members?fields=id,fullName,username, returns
+        List<TrelloMemberDto>.
+      ────────────────────────────────────────
+      File: DeveloperHttpDto.java
+      What changed: Added String trelloMemberId field (7th); from() maps
+        developer.getTrelloMemberId().
+      ────────────────────────────────────────
+      File: TeamController.java
+      What changed: Injected DeveloperRepository. Added GET /{teamId}/trello/members —
+        verifies ownership, 400 if no board linked, delegates to
+        trelloApiClient.getBoardMembers(). Added PUT
+        /{teamId}/developers/{devId}/trello-member — verifies ownership + team
+      membership,
+         sets trelloMemberId, saves.
+      ────────────────────────────────────────
+      File: TrelloPlanPublisher.java
+      What changed: Injected DeveloperRepository. In publishSprint(), before each
+        createCard() call, looks up the assigned developer to get their name and
+        trelloMemberId. Passes both to updated createCard() and buildCardDescription().
+        buildCardDescription() now takes developerName and emits **Assigned to:**,
+        **Role:**, **Story Points:** in the card body.
+
+      No new DB migration needed — trello_member_id column was already added by V3.
+
+      Modified (Frontend)
+
+      File: src/types/team.ts
+      What changed: Added trelloMemberId?: string to Developer interface.
+      ────────────────────────────────────────
+      File: src/api/teamApi.ts
+      What changed: Added TrelloMember interface. Added getTrelloMembers(teamId) → GET
+        members endpoint. Added linkTrelloMember(teamId, devId, trelloMemberId) → PUT
+        trello-member endpoint.
+      ────────────────────────────────────────
+      File: src/features/team-setup/TeamSetupPage.tsx
+      What changed: Imports getTrelloMembers, linkTrelloMember, TrelloMember. Added
+        trelloMembers and memberMappings state; fetchMembersMutation and
+        saveMappingsMutation; useEffect to clear both when selected team changes. New
+        "Sync Trello Members" card section (shown only when trelloBoardId is set): Fetch
+        button → member list with per-member developer dropdown → Save Mappings button
+        with success/error feedback. Developer list rows now show a green ✓ next to
+        developers with trelloMemberId set.
+
+      Compilation
+
+      - TypeScript: zero errors
+      - Java (Maven): zero error
+
+
+    prompt 6:
+
+      Files Modified
+
+      domain/port/out/SprintRepository.java
+      - Added import java.time.Instant
+      - Added new port method: List<Sprint> findStalePlanningSprintsBefore(Instant
+      cutoff)
+
+      infrastructure/persistence/SprintJpaRepository.java
+      - Added import java.time.Instant, import
+      org.springframework.data.jpa.repository.Modifying
+      - Added derived query: findByStatusAndPlannedAtBefore(Sprint.Status status, Instant
+       plannedAt) — used for the cleanup endpoint
+      - Added JPQL bulk delete: @Modifying @Query("DELETE FROM Sprint") void
+      deleteAllBulk() — used by admin reset
+
+      infrastructure/persistence/JpaSprintRepository.java
+      - Added import java.time.Instant
+      - Implemented the new port method findStalePlanningSprintsBefore by delegating to
+      findByStatusAndPlannedAtBefore(PLANNING, cutoff)
+
+      infrastructure/persistence/EditLogJpaRepository.java
+      - Added @Modifying @Query("DELETE FROM EditLog") void deleteAllBulk()
+
+      infrastructure/persistence/DevCompletionJpaRepository.java
+      - Added @Modifying @Query("DELETE FROM DevCompletion") void deleteAllBulk()
+
+      infrastructure/persistence/TaskJpaRepository.java
+      - Added @Modifying @Query("DELETE FROM Task") void deleteAllBulk()
+
+      infrastructure/persistence/SprintReviewJpaRepository.java
+      - Added @Modifying @Query("DELETE FROM SprintReview") void deleteAllBulk()
+
+      web/SprintPlannerController.java
+      - Added import java.time.temporal.ChronoUnit and import
+      org.springframework.transaction.annotation.Transactional
+      - Added DELETE /api/sprints/cleanup endpoint — admin-only (403 if not ADMIN), finds
+       PLANNING sprints older than 24h via findStalePlanningSprintsBefore, deletes each
+      (cascade handles children), returns "Deleted N sprints"
+
+      ---
+      Files Created
+
+      infrastructure/persistence/UserStoryJpaRepository.java (new)
+      - Spring Data JPA interface for UserStory with a JPQL bulk delete method — needed
+      because UserStory had no standalone repository before
+
+      domain/port/out/AdminResetPort.java (new)
+      - Domain port with a single method resetAllSprintData() — keeps the web layer
+      decoupled from JPA
+
+      infrastructure/persistence/JpaAdminResetAdapter.java (new)
+      - Implements AdminResetPort; annotated @Transactional
+      - Runs JPQL bulk deletes in FK-safe dependency order:
+        a. dev_completion → 2. edit_log → 3. task → 4. user_story → 5. sprint_review → 6.
+       sprint
+
+      web/AdminController.java (new)
+      - DELETE /api/admin/reset — admin-only (403 if not ADMIN), calls
+      adminResetPort.resetAllSprintData(), returns "Reset complete. All sprint data
+      deleted."
+
+      ---
+      What was NOT touched
+
+      - No migration files created (no schema changes needed)
+      - JWT / auth flow untouched
+      - DevDataSeeder untouched
+      - All Gemini adapter prompt text untouched
+      - PlanningOrchestrator untouched
+
+      ---
+      Compile status
+
+      Maven wasn't available in the shell, so I couldn't run a compile check. The code
+      follows all existing patterns in the codebase (constructor injection,
+      @Transactional on the adapter, JPQL matches entity class names). You can verify
+      with ./mvnw compile or your IDE.
+
+    ✻ Cooked for 18s
+
+
+
+okay.
+
+  Dev Seed Reference
+
+  Credentials
+
+  ┌──────────┬─────────────────────────────────────────────┐
+  │  Field   │                    Value                    │
+  ├──────────┼─────────────────────────────────────────────┤
+  │ Email    │ dev@sprint.local                            │
+  ├──────────┼─────────────────────────────────────────────┤
+  │ Password │ dev123                                      │
+  ├──────────┼─────────────────────────────────────────────┤
+  │ Role     │ ADMIN (if first user in DB), otherwise USER │
+  └──────────┴─────────────────────────────────────────────┘
+
+  ---
+  Teams & Developers
+
+  Team Orbit
+
+  - Domain: FINTECH
+  - Sprint length: 10 days
+
+  ┌──────────────────┬────────────────┬───────────────────┬───────────────┐
+  │       Name       │      Role      │   Capabilities    │ Base Velocity │
+  ├──────────────────┼────────────────┼───────────────────┼───────────────┤
+  │ Jordan Reed      │ Senior Backend │ backend           │ 8             │
+  ├──────────────────┼────────────────┼───────────────────┼───────────────┤
+  │ Mina Hassan      │ DevOps         │ devops            │ 6             │
+  ├──────────────────┼────────────────┼───────────────────┼───────────────┤
+  │ Satoshi Yamamoto │ Full Stack     │ backend, frontend │ 10            │
+  ├──────────────────┼────────────────┼───────────────────┼───────────────┤
+  │ Dana Kim         │ QA Engineer    │ qa                │ 5             │
+  └──────────────────┴────────────────┴───────────────────┴───────────────┘
+
+  ---
+  Team Atlas
+
+  - Domain: E_COMMERCE
+  - Sprint length: 14 days
+
+  ┌─────────────┬───────────────────┬──────────────┬───────────────┐
+  │    Name     │       Role        │ Capabilities │ Base Velocity │
+  ├─────────────┼───────────────────┼──────────────┼───────────────┤
+  │ Ava Chen    │ Senior Backend    │ backend      │ 9             │
+  ├─────────────┼───────────────────┼──────────────┼───────────────┤
+  │ Marco Silva │ Frontend Engineer │ frontend     │ 6             │
+  ├─────────────┼───────────────────┼──────────────┼───────────────┤
+  │ Priya Nair  │ QA Engineer       │ qa           │ 4             │
+  └─────────────┴───────────────────┴──────────────┴───────────────┘
+
+  ---
+  Team Pulse
+
+  - Domain: GENERIC
+  - Sprint length: 14 days
+
+  ┌─────────────────┬──────────────────┬──────────────┬───────────────┐
+  │      Name       │       Role       │ Capabilities │ Base Velocity │
+  ├─────────────────┼──────────────────┼──────────────┼───────────────┤
+  │ Elena Rodriguez │ Android Engineer │ android      │ 7             │
+  ├─────────────────┼──────────────────┼──────────────┼───────────────┤
+  │ Kofi Mensah     │ iOS Engineer     │ ios          │ 6             │
+  ├─────────────────┼──────────────────┼──────────────┼───────────────┤
+  │ Sarah Jenkins   │ QA Engineer      │ qa           │ 5             │
+  ├─────────────────┼──────────────────┼──────────────┼───────────────┤
+  │ Alex Volkov     │ Backend Engineer │ backend      │ 8             │
+  └─────────────────┴──────────────────┴──────────────┴───────────────┘
+
+  ---
+  Sample Epics
+
+  Team Orbit (FINTECH)
+
+  - Add IBAN validation | Validate format and checksum on transfer submission
+  - Reconciliation report | Daily EOD report for all settled transactions
+
+  Team Atlas (E_COMMERCE)
+
+  - Checkout flow redesign | Simplify 3-step checkout to single page
+  - Product search | Add filters, sorting, and instant search
+
+  Team Pulse (GENERIC/Mobile)
+
+  - Offline mode | Cache sprint data for offline review
+  - Push notifications | Notify devs of new task assignments

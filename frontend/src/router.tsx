@@ -6,12 +6,13 @@ import { PlanningPage } from './features/planning/PlanningPage';
 import { ReviewPage } from './features/review/ReviewPage';
 import { SprintClosePage } from './features/sprint-close/SprintClosePage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/teams" replace />,
+    element: <Navigate to="/dashboard" replace />,
   },
   {
     path: '/login',
@@ -20,6 +21,14 @@ export const router = createBrowserRouter([
   {
     path: '/signup',
     element: <SignupPage />,
+  },
+  {
+    path: '/dashboard',
+    element: (
+      <ProtectedRoute>
+        <DashboardPage />
+      </ProtectedRoute>
+    ),
   },
   {
     path: '/teams',

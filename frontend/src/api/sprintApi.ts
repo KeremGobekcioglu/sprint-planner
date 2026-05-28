@@ -2,6 +2,7 @@ import api from './axios';
 import { getDevelopers, getTeams } from './teamApi';
 import { getSampleEpicsForTeam, getSampleSprintGoal, SAMPLE_EPICS_PAYFLOW, SAMPLE_EPICS_SHOPHUB } from './sampleData';
 import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
+import type { DashboardResponse } from '../types/dashboard';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
@@ -252,6 +253,13 @@ export const getActiveSprint = (): Promise<ActiveSprintResponse | null> => {
     .catch(() => null);
 };
 
+export const getDashboardData = (): Promise<DashboardResponse> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve({ activeSprints: [], teams: [], recentSprints: [] });
+  }
+  return api.get<DashboardResponse>('/api/dashboard').then((r) => r.data);
+};
+
 export const getPlanningMode = async (teamId: string) => {
   if (!USE_REAL_API) {
     // Mock: return FRESH if no completed sprints in mock data, else CONTINUOUS
@@ -272,6 +280,14 @@ export interface PlanningStep {
 export const getPlanningStatus = (): Promise<PlanningStep[]> => {
   if (!USE_REAL_API) return Promise.resolve([]);
   return api.get<PlanningStep[]>('/api/sprints/plan/status').then((r) => r.data ?? []);
+};
+
+export const deleteSprint = (sprintId: string): Promise<void> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve();
+  }
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  return api.delete(`/api/sprints/${canonicalSprintId}`).then(() => undefined);
 };
 
 export async function getSampleEpicsForPlanning(
