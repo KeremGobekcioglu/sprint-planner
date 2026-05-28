@@ -63,7 +63,8 @@ public class StubDistributionAdapter implements DistributionPort {
             userStories.stream()
                 .map(SprintPlanMapper::toDto)
                 .toList(),
-            List.of()
+            List.of(),
+            null
         );
     }
 

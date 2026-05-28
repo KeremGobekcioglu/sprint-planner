@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
+import { deleteSprint } from '../../api/sprintApi';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -17,7 +20,15 @@ export function ReviewPage() {
   const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const effectiveSprintId = planQuery.data?.sprintId;
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteSprint(id),
+    onSuccess: () => {
+      navigate('/dashboard');
+    },
+  });
 
   const stories = planQuery.data?.userStories ?? [];
   const unassignedTasks = planQuery.data?.unassignedTasks ?? [];
@@ -79,44 +90,55 @@ export function ReviewPage() {
       title="Review"
       subtitle="Inspect, edit and rebalance the plan before pushing anything to Trello."
       actions={
-        pushTrelloMutation.isSuccess ? (
-          <span className="rounded-lg bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-300">
-            Pushed to Trello ✓
-          </span>
-        ) : (
-          <span title={!hasTrelloBoard && teamQuery.data !== undefined ? 'Link a Trello board in team setup first' : undefined}>
+        <div className="flex items-center gap-2">
+          {planQuery.data?.sprintStatus === 'PLANNING' && (
             <button
-              className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={
-                !planQuery.data ||
-                !hasReviewedAllWarnings ||
-                approveMutation.isPending ||
-                pushTrelloMutation.isPending ||
-                !effectiveSprintId ||
-                !hasTrelloBoard
-              }
-              onClick={() => {
-                if (!effectiveSprintId) return;
-                approveMutation.mutate(effectiveSprintId, {
-                  onSuccess: () => {
-                    pushTrelloMutation.mutate(effectiveSprintId, {
-                      onSuccess: () => {
-                        reset();
-                        navigate(`/sprints/${effectiveSprintId}/close`);
-                      },
-                    });
-                  },
-                });
-              }}
+              className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteDialogOpen(true)}
             >
-              {approveMutation.isPending
-                ? 'Approving...'
-                : pushTrelloMutation.isPending
-                  ? 'Pushing to Trello...'
-                  : 'Approve & Push to Trello'}
+              {deleteMutation.isPending ? 'Deleting...' : 'Discard Sprint'}
             </button>
-          </span>
-        )
+          )}
+          {pushTrelloMutation.isSuccess ? (
+            <span className="rounded-lg bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-300">
+              Pushed to Trello ✓
+            </span>
+          ) : (
+            <span title={!hasTrelloBoard && teamQuery.data !== undefined ? 'Link a Trello board in team setup first' : undefined}>
+              <button
+                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={
+                  !planQuery.data ||
+                  !hasReviewedAllWarnings ||
+                  approveMutation.isPending ||
+                  pushTrelloMutation.isPending ||
+                  !effectiveSprintId ||
+                  !hasTrelloBoard
+                }
+                onClick={() => {
+                  if (!effectiveSprintId) return;
+                  approveMutation.mutate(effectiveSprintId, {
+                    onSuccess: () => {
+                      pushTrelloMutation.mutate(effectiveSprintId, {
+                        onSuccess: () => {
+                          reset();
+                          navigate(`/sprints/${effectiveSprintId}/close`);
+                        },
+                      });
+                    },
+                  });
+                }}
+              >
+                {approveMutation.isPending
+                  ? 'Approving...'
+                  : pushTrelloMutation.isPending
+                    ? 'Pushing to Trello...'
+                    : 'Approve & Push to Trello'}
+              </button>
+            </span>
+          )}
+        </div>
       }
     >
       <div className="mb-4">
@@ -199,6 +221,10 @@ export function ReviewPage() {
           </div>
         )}
 
+        {deleteMutation.isError && (
+          <ErrorBanner message="Failed to delete the sprint." error={deleteMutation.error} />
+        )}
+
         <div className="grid gap-4 pb-32 md:grid-cols-2 xl:grid-cols-3">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
@@ -261,6 +287,22 @@ export function ReviewPage() {
           ))}
         </div>
       </section>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Discard Sprint"
+        message="This will permanently delete the sprint plan. This cannot be undone."
+        confirmLabel="Delete Sprint"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={() => {
+          setDeleteDialogOpen(false);
+          if (effectiveSprintId) {
+            deleteMutation.mutate(effectiveSprintId);
+          }
+        }}
+        onCancel={() => setDeleteDialogOpen(false)}
+      />
     </PageLayout>
   );
 }

@@ -11,5 +11,6 @@ public record SprintPlan(
     UUID teamId,
     String sprintGoal,
     List<UserStoryDto> userStories,
-    List<TaskDto> unassignedTasks
+    List<TaskDto> unassignedTasks,
+    String sprintStatus
 ) {}

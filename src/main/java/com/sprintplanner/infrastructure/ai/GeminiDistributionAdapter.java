@@ -56,7 +56,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             logger.info("[DISTRIBUTION] No sprint history memory");
         }
         if (estimatedUserStories == null || estimatedUserStories.isEmpty()) {
-            return new SprintPlan(teamId, sprintGoal, List.of(), List.of());
+            return new SprintPlan(teamId, sprintGoal, List.of(), List.of(), null);
         }
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {
             return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories, List.of());
@@ -88,7 +88,8 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 .toList(),
             unassignedTasks == null
                 ? List.of()
-                : unassignedTasks.stream().map(SprintPlanMapper::toDto).toList()
+                : unassignedTasks.stream().map(SprintPlanMapper::toDto).toList(),
+            null
         );
     }
 

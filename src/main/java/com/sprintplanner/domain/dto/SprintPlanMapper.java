@@ -78,7 +78,8 @@ public class SprintPlanMapper {
             sprint.getTeamId(),
             sprint.getGoal(),
             storyDtos,
-            List.of()
+            List.of(),
+            sprint.getStatus().name()
         );
     }
 

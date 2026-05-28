@@ -21,6 +21,7 @@ import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -79,7 +82,8 @@ public class SprintPlannerController {
                 : request.epics().stream().map(epic -> new Epic(epic.title(), epic.description())).toList(),
             request.domain(),
             request.sprintGoal(),
-            request.daysOff() == null ? Map.of() : request.daysOff()
+            request.daysOff() == null ? Map.of() : request.daysOff(),
+            request.previousSprintContext()
         );
         
         SprintPlan plan = planningInputPort.planSprint(planningRequest);
@@ -131,7 +135,8 @@ public class SprintPlannerController {
                                 story.tasks()
                         ))
                         .toList(),
-                plan.unassignedTasks() == null ? List.of() : plan.unassignedTasks()
+                plan.unassignedTasks() == null ? List.of() : plan.unassignedTasks(),
+                "PLANNING"
         );
 
         return ResponseEntity.ok(planWithId);
@@ -237,6 +242,40 @@ public class SprintPlannerController {
 
         trelloPlanPublisher.publishSprint(normalizedSprintId, team.getTrelloBoardId());
         return ResponseEntity.ok("Sprint pushed to Trello successfully");
+    }
+
+    @DeleteMapping("/cleanup")
+    @Transactional
+    public ResponseEntity<String> cleanupDeadSprints() {
+        if (!SecurityUtils.isAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Forbidden");
+        }
+        Instant cutoff = Instant.now().minus(24, ChronoUnit.HOURS);
+        List<Sprint> staleSprints = sprintRepository.findStalePlanningSprintsBefore(cutoff);
+        for (Sprint sprint : staleSprints) {
+            sprintRepository.deleteById(sprint.getId());
+        }
+        return ResponseEntity.ok("Deleted " + staleSprints.size() + " sprints");
+    }
+
+    @DeleteMapping("/{sprintId}")
+    public ResponseEntity<Void> deleteSprint(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+
+        teamRepository.findById(sprint.getTeamId())
+            .filter(team -> team.getOwnerId().equals(currentUserId))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"));
+
+        if (sprint.getStatus() == Sprint.Status.ACTIVE || sprint.getStatus() == Sprint.Status.COMPLETED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot delete an active or completed sprint");
+        }
+
+        sprintRepository.deleteById(normalizedSprintId);
+        return ResponseEntity.noContent().build();
     }
 
     private UUID normalizeSprintId(String rawSprintId) {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode } from '../../api/sprintApi';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
@@ -36,6 +36,9 @@ export function PlanningPage() {
   const navigate = useNavigate();
   const { setSprint, setTeam } = usePlanningStore();
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
+  const [planGenerated, setPlanGenerated] = useState(false);
+  const [previousSprintContext, setPreviousSprintContext] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
   const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
   const planningModeQuery = useQuery({
     queryKey: ['planningMode', teamId],
@@ -43,17 +46,19 @@ export function PlanningPage() {
     enabled: Boolean(teamId),
   });
 
-  const modeStep = planningModeQuery.data
+  const modeData = planningModeQuery.data as any;
+  const isFresh = modeData?.mode === 'FRESH';
+
+  const modeStep = modeData
     ? (() => {
-        const d: any = planningModeQuery.data as any;
         let message = '';
-        if (d.mode === 'FRESH') {
+        if (isFresh) {
           message = '🆕 Fresh start — building from scratch';
         } else {
-          if (d.hasTeamProfile) {
-            message = `🧠 Continuous mode — ${d.completedSprints} prior sprints loaded, team preferences active`;
+          if (modeData.hasTeamProfile) {
+            message = `🧠 Continuous mode — ${modeData.completedSprints} prior sprints loaded, team preferences active`;
           } else {
-            message = `📊 Continuous mode — ${d.completedSprints} prior sprints, preferences not yet generated`;
+            message = `📊 Continuous mode — ${modeData.completedSprints} prior sprints, preferences not yet generated`;
           }
         }
         return { phase: 'mode', message, at: new Date().toISOString(), done: true, error: false } as any;
@@ -101,6 +106,38 @@ export function PlanningPage() {
           ← Back to Teams
         </button>
       </div>
+
+      {/* Mode info panel */}
+      {modeData ? (
+        isFresh ? (
+          <div className="mb-4 rounded-xl border border-blue-500/30 bg-blue-950/30 p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span>🌱</span>
+              <span className="font-semibold text-blue-200">Fresh Start</span>
+            </div>
+            <p className="text-sm text-blue-300/80">
+              This team has no sprint history. The AI will use conservative defaults for this sprint.
+              Memory will start building after your first completed sprint review.
+            </p>
+          </div>
+        ) : (
+          <div className="mb-4 rounded-xl border border-teal-500/30 bg-teal-950/30 p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span>🧠</span>
+              <span className="font-semibold text-teal-200">
+                Continuous Mode — {modeData.completedSprints} sprints completed
+              </span>
+            </div>
+            <p className="mb-2 text-sm text-teal-300/80">
+              The AI will use your team's sprint history and learned preferences for this plan.
+            </p>
+            <Link to="/profile#memory" className="text-sm text-teal-400 hover:underline">
+              View Memory →
+            </Link>
+          </div>
+        )
+      ) : null}
+
       <section className="grid gap-6 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         <form
           className="space-y-4"
@@ -135,27 +172,62 @@ const payload: PlanningRequest = {
     sprintGoal: values.sprintGoal,
     epics,
     daysOff: sanitizedDaysOff,
+    ...(previousSprintContext.trim() ? { previousSprintContext: previousSprintContext.trim() } : {}),
 };
 
             setTeam(teamId);
             planMutation.mutate(payload, {
               onSuccess: (plan) => {
                 setSprint(plan.sprintId);
-                navigate(`/sprints/${plan.sprintId}/review`);
+                setPlanGenerated(true);
+                setTimeout(() => navigate('/dashboard'), 2000);
               },
             });
           })}
         >
+          {/* Import previous sprint history — only in Fresh Start mode */}
+          {isFresh ? (
+            <div className="overflow-hidden rounded-xl border border-slate-600/40">
+              <button
+                type="button"
+                onClick={() => setImportOpen(!importOpen)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+              >
+                <span>Import Previous Sprint History (Optional)</span>
+                <span className="text-slate-500">{importOpen ? '▲' : '▼'}</span>
+              </button>
+              {importOpen ? (
+                <div className="space-y-3 border-t border-slate-600/40 px-4 pb-4 pt-3">
+                  <textarea
+                    value={previousSprintContext}
+                    onChange={(e) => setPreviousSprintContext(e.target.value)}
+                    placeholder={`Paste your previous sprint summary here.\n\nFormat: Sprint goal, what was completed, velocity, any blockers.\n\nExample:\nSprint goal: Launch checkout flow\nVelocity: 34/40 pts completed\nBlockers: Payment integration took longer than estimated`}
+                    rows={7}
+                    className="w-full resize-y rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-600"
+                  />
+                  <div>
+                    <label className="mb-1 block text-xs text-slate-400">Or upload a .txt / .md file</label>
+                    <input
+                      type="file"
+                      accept=".txt,.md"
+                      className="text-sm text-slate-400"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                          setPreviousSprintContext((evt.target?.result as string) ?? '');
+                        };
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div>
-            {planningModeQuery.data ? (
-              <div className="mb-3 flex items-center gap-2">
-                {(planningModeQuery.data as any).mode === 'FRESH' ? (
-                  <span className="rounded-full bg-blue-500/90 px-3 py-1 text-xs font-semibold text-white">Fresh Start — no prior history</span>
-                ) : (
-                  <span className="rounded-full bg-emerald-600/90 px-3 py-1 text-xs font-semibold text-white">Continuous — {(planningModeQuery.data as any).completedSprints} sprints completed</span>
-                )}
-              </div>
-            ) : null}
             <div className="flex items-center justify-between">
               <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
               <button
@@ -215,9 +287,18 @@ const payload: PlanningRequest = {
             ))}
           </div>
 
-          <button className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950" disabled={planMutation.isPending}>
-            {planMutation.isPending ? 'Generating...' : 'Generate Plan'}
+          <button
+            className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
+            disabled={planMutation.isPending || planGenerated}
+          >
+            {planGenerated ? 'Sprint Generated ✓' : planMutation.isPending ? 'Generating...' : 'Generate Plan'}
           </button>
+
+          {planGenerated && (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 p-3 text-sm text-emerald-300">
+              Sprint plan generated successfully. You can review and approve it whenever you're ready.
+            </div>
+          )}
         </form>
 
         {planMutation.isPending && planningSteps.length === 0 ? (
