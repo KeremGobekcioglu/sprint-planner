@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 :root {
+  --color-background-info: rgba(56, 189, 248, 0.18);
+  --color-text-info: rgb(56, 189, 248);
+
   color: #e5e7eb;
   background:
     radial-gradient(1100px 620px at 8% -12%, #334155 0%, transparent 58%),
