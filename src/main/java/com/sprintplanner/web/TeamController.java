@@ -3,14 +3,17 @@ package com.sprintplanner.web;
 import com.sprintplanner.application.TeamService;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Team;
+import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.MemoryWriter;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import com.sprintplanner.infrastructure.external.TrelloApiClient;
 import com.sprintplanner.infrastructure.external.TrelloList;
+import com.sprintplanner.infrastructure.external.TrelloMemberDto;
 import com.sprintplanner.web.dto.AddDeveloperHttpRequest;
 import com.sprintplanner.web.dto.CreateTeamHttpRequest;
 import com.sprintplanner.web.dto.DeveloperHttpDto;
+import com.sprintplanner.web.dto.LinkTrelloMemberRequest;
 import com.sprintplanner.web.dto.TeamHttpDto;
 import com.sprintplanner.web.dto.TeamMemoryResponse;
 import com.sprintplanner.web.dto.SeedSampleTeamsResponse;
@@ -37,14 +40,17 @@ public class TeamController {
 
     private final TeamService teamService;
     private final TeamRepository teamRepository;
+    private final DeveloperRepository developerRepository;
     private final MemoryReader memoryReader;
     private final MemoryWriter memoryWriter;
     private final TrelloApiClient trelloApiClient;
 
-    public TeamController(TeamService teamService, TeamRepository teamRepository, MemoryReader memoryReader,
+    public TeamController(TeamService teamService, TeamRepository teamRepository,
+            DeveloperRepository developerRepository, MemoryReader memoryReader,
             MemoryWriter memoryWriter, TrelloApiClient trelloApiClient) {
         this.teamService = teamService;
         this.teamRepository = teamRepository;
+        this.developerRepository = developerRepository;
         this.memoryReader = memoryReader;
         this.memoryWriter = memoryWriter;
         this.trelloApiClient = trelloApiClient;
@@ -201,6 +207,53 @@ public class TeamController {
         team.setTrelloBoardId(body.get("boardId"));
         teamRepository.save(team);
         return ResponseEntity.ok(TeamHttpDto.from(team));
+    }
+
+    @GetMapping("/{teamId}/trello/members")
+    public ResponseEntity<List<TrelloMemberDto>> getTrelloMembers(@PathVariable UUID teamId) {
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isAdmin = SecurityUtils.isAdmin();
+
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
+
+        if (!isAdmin && (team.getOwnerId() == null || !team.getOwnerId().equals(currentUserId))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
+        if (team.getTrelloBoardId() == null || team.getTrelloBoardId().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No Trello board linked to this team");
+        }
+
+        List<TrelloMemberDto> members = trelloApiClient.getBoardMembers(team.getTrelloBoardId());
+        return ResponseEntity.ok(members);
+    }
+
+    @PutMapping("/{teamId}/developers/{devId}/trello-member")
+    public ResponseEntity<DeveloperHttpDto> linkTrelloMember(
+            @PathVariable UUID teamId,
+            @PathVariable UUID devId,
+            @RequestBody LinkTrelloMemberRequest request) {
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isAdmin = SecurityUtils.isAdmin();
+
+        Team team = teamRepository.findById(teamId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
+
+        if (!isAdmin && (team.getOwnerId() == null || !team.getOwnerId().equals(currentUserId))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied");
+        }
+
+        Developer developer = developerRepository.findById(devId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Developer not found"));
+
+        if (!developer.getTeamId().equals(teamId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Developer does not belong to this team");
+        }
+
+        developer.setTrelloMemberId(request.trelloMemberId());
+        Developer saved = developerRepository.save(developer);
+        return ResponseEntity.ok(DeveloperHttpDto.from(saved));
     }
 
     @PostMapping("/sample-data")

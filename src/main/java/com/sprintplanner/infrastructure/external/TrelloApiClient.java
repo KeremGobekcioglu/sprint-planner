@@ -71,12 +71,15 @@ public class TrelloApiClient {
     }
 
     @SuppressWarnings("rawtypes")
-    public String createCard(String listId, String name, String description) {
+    public String createCard(String listId, String name, String description, String trelloMemberId) {
         validateCredentials();
         String url = config.getBaseUrl() + "/cards?"
                 + auth() + "&idList=" + listId
                 + "&name=" + encode(name)
                 + "&desc=" + encode(description);
+        if (trelloMemberId != null && !trelloMemberId.isBlank()) {
+            url += "&idMembers=" + encode(trelloMemberId);
+        }
         try {
             Map response = restTemplate.postForObject(url, null, Map.class);
             if (response == null || response.get("id") == null) {
@@ -87,6 +90,18 @@ public class TrelloApiClient {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to create card '" + name + "': " + e.getMessage());
+        }
+    }
+
+    public List<TrelloMemberDto> getBoardMembers(String boardId) {
+        validateCredentials();
+        String url = config.getBaseUrl() + "/boards/" + boardId + "/members?"
+                + auth() + "&fields=id,fullName,username";
+        try {
+            TrelloMemberDto[] members = restTemplate.getForObject(url, TrelloMemberDto[].class);
+            return members == null ? List.of() : List.of(members);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to get members for board " + boardId + ": " + e.getMessage());
         }
     }
 

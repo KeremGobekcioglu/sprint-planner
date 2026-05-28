@@ -10,7 +10,8 @@ public record DeveloperHttpDto(
     String name,
     String role,
     List<String> capabilities,
-    int baseVelocity
+    int baseVelocity,
+    String trelloMemberId
 ) {
 
     public static DeveloperHttpDto from(Developer developer) {
@@ -20,7 +21,8 @@ public record DeveloperHttpDto(
             developer.getName(),
             developer.getRole(),
             developer.getCapabilities(),
-            developer.getBaseVelocity()
+            developer.getBaseVelocity(),
+            developer.getTrelloMemberId()
         );
     }
 }

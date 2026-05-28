@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,7 +8,11 @@ import { NoticeBanner } from '../../components/shared/NoticeBanner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
-import { createDeveloper, createTeam, getTrelloBoards, getTeams, linkTrelloBoard, loadSampleData } from '../../api/teamApi';
+import {
+  createDeveloper, createTeam, getTrelloBoards, getTeams, linkTrelloBoard, loadSampleData,
+  getTrelloMembers, linkTrelloMember,
+} from '../../api/teamApi';
+import type { TrelloMember } from '../../api/teamApi';
 import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
@@ -31,6 +35,8 @@ export function TeamSetupPage() {
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const [trelloBoardInput, setTrelloBoardInput] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
+  const [trelloMembers, setTrelloMembers] = useState<TrelloMember[] | null>(null);
+  const [memberMappings, setMemberMappings] = useState<Record<string, string>>({});
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
 
@@ -49,6 +55,32 @@ export function TeamSetupPage() {
       setSelectedBoardId('');
     },
   });
+
+  const fetchMembersMutation = useMutation({
+    mutationFn: (teamId: string) => getTrelloMembers(teamId),
+    onSuccess: (members) => {
+      setTrelloMembers(members);
+      setMemberMappings({});
+    },
+  });
+
+  const saveMappingsMutation = useMutation({
+    mutationFn: async ({ teamId, mappings }: { teamId: string; mappings: Record<string, string> }) => {
+      await Promise.all(
+        Object.entries(mappings)
+          .filter(([, devId]) => devId)
+          .map(([trelloMemberId, devId]) => linkTrelloMember(teamId, devId, trelloMemberId)),
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['developers', selectedTeamId] });
+    },
+  });
+
+  useEffect(() => {
+    setTrelloMembers(null);
+    setMemberMappings({});
+  }, [selectedTeamId]);
 
   const activeSprintQuery = useQuery({
     queryKey: ['active-sprint'],
@@ -283,6 +315,77 @@ export function TeamSetupPage() {
                 ) : null}
               </div>
 
+              {/* Sync Trello Members — only when a board is linked */}
+              {selectedTeam.trelloBoardId ? (
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-200">Sync Trello Members</p>
+                    <button
+                      type="button"
+                      className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 disabled:opacity-50"
+                      onClick={() => fetchMembersMutation.mutate(selectedTeam.id)}
+                      disabled={fetchMembersMutation.isPending}
+                    >
+                      {fetchMembersMutation.isPending ? 'Fetching...' : 'Fetch Trello Members'}
+                    </button>
+                  </div>
+
+                  {fetchMembersMutation.isError ? (
+                    <ErrorBanner message="Could not fetch Trello board members. Check credentials." error={fetchMembersMutation.error} />
+                  ) : null}
+
+                  {trelloMembers !== null ? (
+                    trelloMembers.length === 0 ? (
+                      <p className="text-xs text-slate-500">No members found on this board.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-xs text-slate-400">Map each Trello member to a developer on this team:</p>
+                        <div className="space-y-2">
+                          {trelloMembers.map((member) => (
+                            <div key={member.id} className="flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-slate-200 truncate">{member.fullName}</p>
+                                <p className="text-xs text-slate-500">@{member.username}</p>
+                              </div>
+                              <select
+                                className="rounded-lg border border-slate-500/40 bg-slate-900 px-2 py-1.5 text-sm text-slate-200"
+                                value={memberMappings[member.id] ?? ''}
+                                onChange={(e) =>
+                                  setMemberMappings((prev) => ({ ...prev, [member.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">— select developer —</option>
+                                {(developersQuery.data ?? []).map((dev) => (
+                                  <option key={dev.id} value={dev.id}>
+                                    {dev.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded-lg bg-emerald-500/85 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
+                          disabled={saveMappingsMutation.isPending || Object.values(memberMappings).every((v) => !v)}
+                          onClick={() =>
+                            saveMappingsMutation.mutate({ teamId: selectedTeam.id, mappings: memberMappings })
+                          }
+                        >
+                          {saveMappingsMutation.isPending ? 'Saving...' : 'Save Mappings'}
+                        </button>
+                        {saveMappingsMutation.isSuccess ? (
+                          <p className="text-xs text-emerald-400">Mappings saved.</p>
+                        ) : null}
+                        {saveMappingsMutation.isError ? (
+                          <ErrorBanner message="Failed to save member mappings." error={saveMappingsMutation.error} />
+                        ) : null}
+                      </div>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+
               <DeveloperForm
                 isSubmitting={createDeveloperMutation.isPending}
                 onSubmit={(values) => {
@@ -299,11 +402,16 @@ export function TeamSetupPage() {
                     key={developer.id}
                     className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/45 p-3"
                   >
-                    <div>
-                      <p className="font-medium text-slate-100">{developer.name}</p>
-                      <p className="text-xs uppercase tracking-wide text-slate-300">
-                        {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      {developer.trelloMemberId ? (
+                        <span className="text-emerald-400 text-sm" title="Trello member linked">✓</span>
+                      ) : null}
+                      <div>
+                        <p className="font-medium text-slate-100">{developer.name}</p>
+                        <p className="text-xs uppercase tracking-wide text-slate-300">
+                          {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
+                        </p>
+                      </div>
                     </div>
                     <button
                       className="rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200"

@@ -17,4 +17,5 @@ export interface Developer {
   role: string;
   capabilities: CapabilityTag[];
   baseVelocity: number;
+  trelloMemberId?: string;
 }

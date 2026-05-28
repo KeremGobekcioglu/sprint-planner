@@ -212,6 +212,18 @@ export const linkTrelloBoard = (teamId: string, boardId: string): Promise<Team> 
 export const getTrelloBoards = (): Promise<{ id: string; name: string }[]> =>
   api.get<{ id: string; name: string }[]>('/api/teams/trello/boards').then((response) => response.data);
 
+export interface TrelloMember {
+  id: string;
+  fullName: string;
+  username: string;
+}
+
+export const getTrelloMembers = (teamId: string): Promise<TrelloMember[]> =>
+  api.get<TrelloMember[]>(`/api/teams/${teamId}/trello/members`).then((r) => r.data);
+
+export const linkTrelloMember = (teamId: string, devId: string, trelloMemberId: string): Promise<void> =>
+  api.put(`/api/teams/${teamId}/developers/${devId}/trello-member`, { trelloMemberId }).then(() => undefined);
+
 export const loadSampleData = async () => {
   if (USE_REAL_API) {
     const response = await api.post<{ teamsCreated: number; developersCreated: number; firstTeamId?: string | null }>(
