@@ -9,6 +9,7 @@ public record PlanSprintHttpRequest(
     List<EpicHttpDto> epics,
     String domain,
     String sprintGoal,
-    Map<UUID, Integer> daysOff
+    Map<UUID, Integer> daysOff,
+    String previousSprintContext
 ) {
 }

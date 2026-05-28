@@ -13,5 +13,6 @@ public record PlanningRequest(
     List<Epic> epics,
     String domain,           // E_COMMERCE | FINTECH | GENERIC
     String sprintGoal,
-    Map<UUID, Integer> daysOff  // developerId -> days off this sprint
+    Map<UUID, Integer> daysOff,  // developerId -> days off this sprint
+    String previousSprintContext // optional one-time import; never persisted to memory files
 ) {}

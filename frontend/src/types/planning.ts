@@ -12,6 +12,7 @@ export interface PlanningRequest {
   domain: TeamDomain;
   sprintGoal: string;
   daysOff: Record<string, number>;
+  previousSprintContext?: string;
 }
 
 export interface MismatchWarning {
@@ -25,6 +26,7 @@ export interface SprintPlan {
   sprintGoal: string;
   userStories: UserStory[];
   unassignedTasks: UserStory['tasks'];
+  sprintStatus?: string;
 }
 
 /**
