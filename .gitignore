@@ -36,3 +36,5 @@ frontend/.env
 src\main\resources\application.properties
 
 .env
+memory/
+noteslatest24may.txt
