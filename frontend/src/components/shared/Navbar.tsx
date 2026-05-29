@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
+import { getTrelloStatus } from '../../api/profileApi';
 
 export function Navbar() {
   const { name, email, isAuthenticated, logout } = useAuthStore();
@@ -10,6 +11,16 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const trelloStatusQuery = useQuery({
+    queryKey: ['trello-status'],
+    queryFn: getTrelloStatus,
+    staleTime: 1000 * 60 * 30,
+    enabled: isAuthenticated,
+    retry: false,
+  });
+
+  const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
 
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
@@ -53,10 +64,32 @@ export function Navbar() {
           <NavLink to="/teams" className={navLinkClass}>
             Teams
           </NavLink>
+          <NavLink
+            to="/faq"
+            className={({ isActive }) =>
+              `px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-slate-700/70 text-slate-300'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/40'
+              }`
+            }
+          >
+            FAQ
+          </NavLink>
         </div>
 
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Trello connection indicator — desktop only */}
+        {isAuthenticated && !isTrelloConnected && (
+          <NavLink
+            to="/profile#trello"
+            className="mr-3 hidden items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors md:flex"
+          >
+            🔗 Connect Trello
+          </NavLink>
+        )}
 
         {/* User menu */}
         {isAuthenticated && (
@@ -66,14 +99,19 @@ export function Navbar() {
               onClick={() => setDropdownOpen((prev) => !prev)}
               className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200 transition-colors hover:bg-slate-700/40"
             >
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                style={{
-                  background: 'var(--color-background-info)',
-                  color: 'var(--color-text-info)',
-                }}
-              >
-                {avatarLetter}
+              <span className="relative">
+                <span
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  style={{
+                    background: 'var(--color-background-info)',
+                    color: 'var(--color-text-info)',
+                  }}
+                >
+                  {avatarLetter}
+                </span>
+                {isTrelloConnected && (
+                  <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-900" />
+                )}
               </span>
               <span className="hidden font-medium sm:inline">{displayName}</span>
               <span className="text-xs text-slate-400">▾</span>
@@ -148,6 +186,22 @@ export function Navbar() {
             >
               Teams
             </NavLink>
+            <NavLink
+              to="/faq"
+              className={navLinkClass}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              FAQ
+            </NavLink>
+            {isAuthenticated && !isTrelloConnected && (
+              <NavLink
+                to="/profile#trello"
+                className="px-3 py-1.5 text-xs text-slate-500"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                🔗 Connect Trello
+              </NavLink>
+            )}
           </div>
         </div>
       )}

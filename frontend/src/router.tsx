@@ -8,6 +8,8 @@ import { ReviewPage } from './features/review/ReviewPage';
 import { SprintClosePage } from './features/sprint-close/SprintClosePage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
+import { OnboardingPage } from './features/onboarding/OnboardingPage';
+import { FaqPage } from './features/faq/FaqPage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 
 export const router = createBrowserRouter([
@@ -74,5 +76,17 @@ export const router = createBrowserRouter([
         <ProfilePage />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/onboarding',
+    element: (
+      <ProtectedRoute>
+        <OnboardingPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/faq',
+    element: <FaqPage />,
   },
 ]);

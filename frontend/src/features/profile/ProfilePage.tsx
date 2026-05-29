@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useProfile } from '../../hooks/useProfile';
@@ -45,15 +46,27 @@ function MemoryPanel({ team }: { team: TeamSummary }) {
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-200">Team Preferences</p>
-                  <button
-                    type="button"
-                    onClick={() => clearMutation.mutate()}
-                    disabled={clearMutation.isPending || !data.teamProfile}
-                    className="rounded px-2 py-0.5 text-xs text-rose-300 hover:bg-rose-900/30 disabled:opacity-40"
-                  >
-                    {clearMutation.isPending ? 'Clearing...' : 'Clear preferences'}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-slate-200">Team Preferences</p>
+                    <HelpTooltip
+                      text="Generated from your edits on the Review screen. The AI applies these preferences to future sprints."
+                      position="right"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <HelpTooltip
+                      text="Resets the AI's learned preferences for this team. Sprint history is preserved."
+                      position="left"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => clearMutation.mutate()}
+                      disabled={clearMutation.isPending || !data.teamProfile}
+                      className="rounded px-2 py-0.5 text-xs text-rose-300 hover:bg-rose-900/30 disabled:opacity-40"
+                    >
+                      {clearMutation.isPending ? 'Clearing...' : 'Clear preferences'}
+                    </button>
+                  </div>
                 </div>
                 <div className="prose prose-sm prose-invert max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-900 p-3 text-xs">
                   {data.teamProfile ? (
@@ -70,7 +83,13 @@ function MemoryPanel({ team }: { team: TeamSummary }) {
               </div>
 
               <div>
-                <p className="mb-2 text-sm font-semibold text-slate-200">Sprint History</p>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-slate-200">Sprint History</p>
+                  <HelpTooltip
+                    text="Built from completed sprint reviews. Used to calibrate estimates and capacity."
+                    position="right"
+                  />
+                </div>
                 <div className="prose prose-sm prose-invert max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-900 p-3 text-xs">
                   {data.sprintHistory ? (
                     <ReactMarkdown>{data.sprintHistory}</ReactMarkdown>
@@ -155,10 +174,10 @@ export function ProfilePage() {
       <div className="mb-4">
         <button
           type="button"
-          onClick={() => navigate('/teams')}
+          onClick={() => navigate('/dashboard')}
           className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
         >
-          ← Back to Teams
+          ← Back to Dashboard
         </button>
       </div>
 
@@ -217,7 +236,7 @@ export function ProfilePage() {
         </section>
 
         {/* Section — Trello Connection */}
-        <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
+        <section id="trello" className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card scroll-mt-20">
           <h2 className="text-lg font-semibold text-slate-100">Trello Connection</h2>
 
           {trelloConnectSuccess && (
@@ -325,26 +344,35 @@ export function ProfilePage() {
           {statsQuery.isError ? <ErrorBanner message="Could not load stats." /> : null}
 
           {statsQuery.data ? (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
-                <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsPlanned}</p>
-                <p className="mt-1 text-xs text-slate-400">Sprints planned</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
-                <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsCompleted}</p>
-                <p className="mt-1 text-xs text-slate-400">Sprints completed</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
-                <p className="text-2xl font-bold text-slate-100">
-                  {Math.round(statsQuery.data.averageVelocityAccuracy * 100)}%
+            statsQuery.data.totalSprintsCompleted === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-slate-950/30 px-5 py-8 text-center">
+                <p className="text-sm text-slate-300">No sprints completed yet.</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Complete your first sprint review to see stats here.
                 </p>
-                <p className="mt-1 text-xs text-slate-400">Avg velocity accuracy</p>
               </div>
-              <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
-                <p className="text-2xl font-bold text-slate-100">{statsQuery.data.goalHitRate}%</p>
-                <p className="mt-1 text-xs text-slate-400">Goal hit rate</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsPlanned}</p>
+                  <p className="mt-1 text-xs text-slate-400">Sprints planned</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsCompleted}</p>
+                  <p className="mt-1 text-xs text-slate-400">Sprints completed</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-100">
+                    {Math.round(statsQuery.data.averageVelocityAccuracy * 100)}%
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">Avg velocity accuracy</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-100">{statsQuery.data.goalHitRate}%</p>
+                  <p className="mt-1 text-xs text-slate-400">Goal hit rate</p>
+                </div>
               </div>
-            </div>
+            )
           ) : null}
         </section>
 

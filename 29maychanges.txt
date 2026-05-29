@@ -79,3 +79,167 @@ The implementation is complete. Let me provide a summary of all changes made:
 
   16. frontend/.env.example (new)
   - Documents VITE_TRELLO_API_KEY environment variable
+
+
+  navigation:
+
+  ● All remaining /teams navigations are legitimate forward actions (Dashboard → Teams
+    CTA, Profile "create first team" link, PlanningPage ← Back to Teams). These are
+    correct per the nav map. No stale navigate(-1) anywhere.
+
+    ---
+    Summary of all 9 changes made
+
+    ┌─────┬─────────────────┬─────────────────────────┬───────────────────────────┐
+    │  #  │      File       │           Old           │            New            │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │     │ LoginPage       │ navigate('/teams',      │ navigate('/dashboard',    │
+    │ 1   │ authenticated   │ {replace:true})         │ {replace:true})           │
+    │     │ guard           │                         │                           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │ 2   │ LoginPage       │ navigate('/teams')      │ navigate('/dashboard',    │
+    │     │ success         │                         │ {replace:true})           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │     │ SignupPage      │ navigate('/teams',      │ navigate('/dashboard',    │
+    │ 3   │ authenticated   │ {replace:true})         │ {replace:true})           │
+    │     │ guard           │                         │                           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │ 4   │ SignupPage      │ navigate('/teams')      │ navigate('/dashboard',    │
+    │     │ success         │                         │ {replace:true})           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │ 5   │ PlanningPage    │ navigate('/dashboard')  │ navigate('/dashboard',    │
+    │     │ post-generate   │                         │ {replace:true})           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │     │ ReviewPage back │ navigate(teamId ?       │                           │
+    │ 6   │  button         │ '/teams/:id/plan' :     │ navigate('/dashboard')    │
+    │     │                 │ '/teams')               │                           │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │     │                 │                         │ navigate('/dashboard',    │
+    │ 7   │ SprintClosePage │ <Link to="/teams"> +    │ {replace:true}), removed  │
+    │     │  submit success │ setSubmitted(true)      │ dead submitted state +    │
+    │     │                 │                         │ success panel             │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │ 8   │ SprintClosePage │ import { useMemo,       │ import { useMemo }        │
+    │     │  useState       │ useState }              │ (removed unused useState) │
+    ├─────┼─────────────────┼─────────────────────────┼───────────────────────────┤
+    │ 9   │ ProfilePage     │ navigate('/teams')      │ navigate('/dashboard')    │
+    │     │ back button     │                         │                           │
+    └─────┴─────────────────┴─────────────────────────┴───────────────────────────┘
+
+    History stack is now clean on every path. Pressing Back after login, after
+    planning, or after sprint close will never drop the user onto a stale form.
+
+
+● All clean. Here is the summary for each part:
+
+  ---
+  Part 2 — Onboarding Flow
+
+  Files created:
+  - frontend/src/features/onboarding/OnboardingPage.tsx — 4-step onboarding with
+  progress indicator, team creation form, Trello step, and welcome-to-planning final
+  step.
+
+  Files modified:
+  - frontend/src/router.tsx — Added protected /onboarding route.
+  - frontend/src/features/dashboard/DashboardPage.tsx — Added useEffect that
+  redirects to /onboarding when teams.length === 0 and
+  localStorage.getItem('onboarding_complete') is null.
+
+  What changed:
+  - New users who have no teams and haven't completed onboarding are auto-redirected
+  from /dashboard to /onboarding.
+  - Step 1: Welcome card with 3 feature cards and "Get Started →".
+  - Step 2: Inline team creation form (name, domain, sprint length) + lightweight
+  dev-add section. Submitting creates the team (and any pending devs via
+  createDeveloper), sets createdTeamId, and advances automatically to step 3.
+  - Step 3: Trello connect button or "Skip for now →". Has a "Check status" re-fetch
+  link for the tab-returning case.
+  - Step 4: Numbered sprint workflow explanation. "Start Planning →" sets
+  onboarding_complete in localStorage and navigates to /teams/:teamId/plan.
+  - "I'll do this later" (step 2) sets onboarding_complete and goes to dashboard.
+
+  TypeScript: Clean.
+
+  ---
+  Part 3 — Empty States
+
+  Files modified:
+  - frontend/src/features/dashboard/DashboardPage.tsx — No-teams state replaced by a
+  centered welcome box with "Create a team →" button navigating to /teams.
+  No-active-sprints text updated to match spec.
+  - frontend/src/features/team-setup/TeamSetupPage.tsx — Added empty state div when
+  developersQuery.data?.length === 0 with spec-exact copy.
+  - frontend/src/features/review/ReviewPage.tsx — Added empty state when
+  planQuery.data is loaded but allTasks.length === 0, with "Back to Planning" button.
+  - frontend/src/features/profile/ProfilePage.tsx — Stats section now conditionally
+  shows the empty state when totalSprintsCompleted === 0.
+
+  TypeScript: Clean.
+
+  ---
+  Part 4 — Contextual Help Tooltips
+
+  Files created:
+  - frontend/src/components/shared/HelpTooltip.tsx — ? circle button with
+  absolute-positioned dark tooltip bubble on hover. CSS-only positioning (no
+  library), 4 directions, z-50.
+
+  Files modified:
+  - frontend/src/features/planning/PlanningPage.tsx — Tooltips next to: Base Velocity
+  (per-developer row), Sprint Goal label, Domain label, Days Off section header,
+  Fresh Start panel, Continuous mode panel.
+  - frontend/src/features/review/ReviewPage.tsx — Tooltips next to: Approve & Push to
+  Trello button, Discard Sprint button.
+  - frontend/src/features/review/DeveloperLane.tsx — Tooltip next to capacity bar.
+  - frontend/src/features/review/TaskCard.tsx — Tooltip next to Defer button.
+  - frontend/src/features/team-setup/DeveloperForm.tsx — Tooltip next to Capabilities
+  checkboxes.
+  - frontend/src/features/team-setup/TeamSetupPage.tsx — Tooltip next to Trello Board
+  ID input.
+  - frontend/src/features/profile/ProfilePage.tsx — Tooltips next to Team
+  Preferences, Sprint History labels, and Clear preferences button.
+
+  TypeScript: Clean.
+
+  ---
+  Part 5 — FAQ Page
+
+  Files created:
+  - frontend/src/features/faq/FaqPage.tsx — 10-item accordion with CSS max-height
+  transition. One section open at a time. Bold term + body rendering for list items.
+
+  Files modified:
+  - frontend/src/router.tsx — Added public /faq route (no ProtectedRoute).
+  - frontend/src/components/shared/Navbar.tsx — Added "FAQ" NavLink on desktop and
+  mobile drawer.
+
+  TypeScript: Clean.
+
+  ---
+  Part 6 — Trello Status in Navbar
+
+  Files modified:
+  - frontend/src/components/shared/Navbar.tsx — Queries getTrelloStatus (shared
+  ['trello-status'] cache key, staleTime: 30 min, enabled: isAuthenticated). Not
+  connected: shows muted 🔗 Connect Trello NavLink to /profile#trello (desktop +
+  mobile). Connected: green dot rendered as absolute overlay on the avatar circle.
+
+  TypeScript: Clean.
+
+  ---
+  Part 7 — In-app Trello Connection Prompts
+
+  Files modified:
+  - frontend/src/features/review/ReviewPage.tsx — Dismissible banner (sky/blue style)
+  shown above swim lanes when planQuery.data is loaded and !isTrelloConnected &&
+  !trelloNoticeDismissed. Dismiss writes trello_notice_dismissed to localStorage.
+  "Connect Trello →" navigates to /profile#trello.
+  - frontend/src/features/team-setup/TeamSetupPage.tsx — Amber notice banner shown
+  when isTrelloConnected && !selectedTeam.trelloBoardId, directly above the
+  board-linking UI.
+  - frontend/src/features/profile/ProfilePage.tsx — Added id="trello" and
+  scroll-mt-20 to the Trello Connection section so the #trello anchor actually
+  scrolls to it.
+
+  TypeScript: Clean.

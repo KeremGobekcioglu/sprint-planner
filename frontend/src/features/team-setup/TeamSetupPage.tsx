@@ -18,6 +18,7 @@ import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
@@ -247,7 +248,22 @@ export function TeamSetupPage() {
           {selectedTeam ? (
             <>
               <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-200">Trello Board</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm font-semibold text-slate-200">Trello Board</p>
+                  <HelpTooltip
+                    text="Paste the board ID from your Trello board URL: trello.com/b/{BOARD_ID}/board-name"
+                    position="right"
+                  />
+                </div>
+
+                {isTrelloConnected && !selectedTeam.trelloBoardId && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-900/20 px-4 py-3 text-sm">
+                    <p className="text-amber-200">
+                      Your Trello account is connected but no board is linked to this team.
+                      Link a board to enable sprint push.
+                    </p>
+                  </div>
+                )}
 
                 {!isTrelloConnected && (
                   <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
@@ -424,6 +440,15 @@ export function TeamSetupPage() {
 
               {developersQuery.isLoading ? <LoadingSpinner label="Loading developers..." /> : null}
               {developersQuery.isError ? <ErrorBanner message="Unable to load developers for this team." /> : null}
+
+              {developersQuery.data?.length === 0 && (
+                <div className="rounded-xl border border-dashed border-white/10 bg-slate-950/30 px-5 py-8 text-center">
+                  <p className="text-sm text-slate-300">No developers yet. Add your first developer above.</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    The AI uses developer capabilities to assign tasks intelligently.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 {developersQuery.data?.map((developer) => (

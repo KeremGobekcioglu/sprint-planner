@@ -17,7 +17,7 @@ export function SignupPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/teams', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
@@ -25,7 +25,7 @@ export function SignupPage() {
     mutationFn: () => register(email, password),
     onSuccess: (data) => {
       loginStore(data.token, data.userId, data.email, data.name, data.role);
-      navigate('/teams');
+      navigate('/dashboard', { replace: true });
     },
     onError: (err: unknown) => {
       if (isAxiosError(err)) {

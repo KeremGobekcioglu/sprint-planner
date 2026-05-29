@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getDashboardData } from '../../api/sprintApi';
@@ -126,6 +127,12 @@ export function DashboardPage() {
     staleTime: 1000 * 60 * 2,
   });
 
+  useEffect(() => {
+    if (data && data.teams.length === 0 && !localStorage.getItem('onboarding_complete')) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [data, navigate]);
+
   return (
     <PageLayout title="Dashboard" subtitle="Overview of your teams and sprints.">
       {isLoading ? <LoadingSpinner label="Loading dashboard..." /> : null}
@@ -138,10 +145,7 @@ export function DashboardPage() {
             <h2 className="text-lg font-semibold text-slate-100">Active Sprints</h2>
             {data.activeSprints.length === 0 ? (
               <p className="text-sm text-slate-400">
-                No active sprints.{' '}
-                <button className="text-sky-300 underline" onClick={() => navigate('/teams')}>
-                  Go to a team to start planning.
-                </button>
+                No active sprints right now. Pick a team below to start planning your next sprint.
               </p>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -155,18 +159,34 @@ export function DashboardPage() {
           {/* Section 2 — My Teams */}
           <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
             <h2 className="text-lg font-semibold text-slate-100">My Teams</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {data.teams.map((team) => (
-                <TeamCard key={team.teamId} team={team} />
-              ))}
-              <button
-                className="flex items-center justify-center rounded-2xl border border-dashed border-white/20 bg-slate-900/30 p-4 text-2xl text-slate-500 hover:border-slate-400/40 hover:text-slate-300 transition"
-                onClick={() => navigate('/teams')}
-                title="Create a new team"
-              >
-                +
-              </button>
-            </div>
+            {data.teams.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/15 bg-slate-900/40 px-6 py-10 text-center">
+                <p className="text-2xl">👋</p>
+                <p className="mt-3 font-semibold text-slate-200">Welcome to Sprint Planner</p>
+                <p className="mt-1 text-sm text-slate-400">
+                  You don't have any teams yet. Create your first team to get started.
+                </p>
+                <button
+                  className="mt-4 rounded-lg bg-blue-500 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-600 transition-colors"
+                  onClick={() => navigate('/teams')}
+                >
+                  Create a team →
+                </button>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {data.teams.map((team) => (
+                  <TeamCard key={team.teamId} team={team} />
+                ))}
+                <button
+                  className="flex items-center justify-center rounded-2xl border border-dashed border-white/20 bg-slate-900/30 p-4 text-2xl text-slate-500 hover:border-slate-400/40 hover:text-slate-300 transition"
+                  onClick={() => navigate('/teams')}
+                  title="Create a new team"
+                >
+                  +
+                </button>
+              </div>
+            )}
           </section>
 
           {/* Section 3 — Recent Activity */}

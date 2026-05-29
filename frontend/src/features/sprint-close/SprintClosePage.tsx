@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -18,7 +18,6 @@ export function SprintClosePage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { planQuery, submitMutation } = useSprintClose(sprintId);
-  const [submitted, setSubmitted] = useState(false);
   const effectiveSprintId = planQuery.data?.sprintId ?? sprintId;
 
   const form = useForm<CloseFormValues>({
@@ -67,17 +66,15 @@ export function SprintClosePage() {
 
   return (
     <PageLayout title="Sprint Close" subtitle="Capture completion and goal outcome to close the sprint.">
-      {!submitted ? (
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => navigate(`/sprints/${sprintId}/review`)}
-            className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
-          >
-            ← Back to Review
-          </button>
-        </div>
-      ) : null}
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => navigate(`/sprints/${sprintId}/review`)}
+          className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+        >
+          ← Back to Review
+        </button>
+      </div>
       <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
         {planQuery.isLoading ? <LoadingSpinner label="Loading sprint tasks..." /> : null}
         {planQuery.isError ? <ErrorBanner message="Could not load sprint tasks for closeout." /> : null}
@@ -85,103 +82,93 @@ export function SprintClosePage() {
           <ErrorBanner message="Failed to submit the sprint review." error={submitMutation.error} />
         ) : null}
 
-        {!submitted ? (
-          <form
-            className="space-y-4"
-            onSubmit={form.handleSubmit((values) => {
-              if (!effectiveSprintId) {
-                return;
-              }
+        <form
+          className="space-y-4"
+          onSubmit={form.handleSubmit((values) => {
+            if (!effectiveSprintId) {
+              return;
+            }
 
-              if (!planQuery.data?.teamId) {
-                return;
-              }
+            if (!planQuery.data?.teamId) {
+              return;
+            }
 
-              submitMutation.mutate(
-                {
-                  teamId: planQuery.data.teamId,
-                  sprintId: effectiveSprintId,
-                  goalResult: values.goalResult,
-                  blockerNote: values.blockerNote || undefined,
-                  taskCompletions: values.taskCompletions,
-                  totalPlannedPts: plannedPoints,
-                  totalCompletedPts: completedPoints,
-                  devCompletions,
+            submitMutation.mutate(
+              {
+                teamId: planQuery.data.teamId,
+                sprintId: effectiveSprintId,
+                goalResult: values.goalResult,
+                blockerNote: values.blockerNote || undefined,
+                taskCompletions: values.taskCompletions,
+                totalPlannedPts: plannedPoints,
+                totalCompletedPts: completedPoints,
+                devCompletions,
+              },
+              {
+                onSuccess: () => {
+                  navigate('/dashboard', { replace: true });
                 },
-                {
-                  onSuccess: () => {
-                    setSubmitted(true);
-                  },
-                },
-              );
-            })}
-          >
-            {!planQuery.data?.teamId ? (
-              <ErrorBanner message="Sprint data is not available. Generate a plan again before submitting review." />
-            ) : null}
+              },
+            );
+          })}
+        >
+          {!planQuery.data?.teamId ? (
+            <ErrorBanner message="Sprint data is not available. Generate a plan again before submitting review." />
+          ) : null}
 
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-100">Task completion</p>
-              <div className="space-y-2">
-                {tasks.map((task) => (
-                  <TaskCompletionToggle
-                    key={task.id}
-                    taskId={task.id}
-                    title={task.title}
-                    checked={Boolean(taskCompletions[task.id])}
-                    onChange={(taskId, checked) => {
-                      const current = form.getValues('taskCompletions');
-                      form.setValue(
-                        'taskCompletions',
-                        {
-                          ...current,
-                          [taskId]: checked,
-                        },
-                        { shouldDirty: true },
-                      );
-                    }}
-                  />
-                ))}
-              </div>
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-100">Task completion</p>
+            <div className="space-y-2">
+              {tasks.map((task) => (
+                <TaskCompletionToggle
+                  key={task.id}
+                  taskId={task.id}
+                  title={task.title}
+                  checked={Boolean(taskCompletions[task.id])}
+                  onChange={(taskId, checked) => {
+                    const current = form.getValues('taskCompletions');
+                    form.setValue(
+                      'taskCompletions',
+                      {
+                        ...current,
+                        [taskId]: checked,
+                      },
+                      { shouldDirty: true },
+                    );
+                  }}
+                />
+              ))}
             </div>
-
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-100">Sprint goal result</p>
-              <select className="w-full rounded-lg border border-ink/20 px-3 py-2" {...form.register('goalResult')}>
-                <option value="YES">Yes</option>
-                <option value="PARTIALLY">Partially</option>
-                <option value="NO">No</option>
-              </select>
-            </div>
-
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-100">Blocker note (optional)</p>
-              <textarea
-                className="h-24 w-full rounded-lg border border-ink/20 px-3 py-2"
-                {...form.register('blockerNote')}
-              />
-            </div>
-
-            <div className="rounded-lg border border-pine/25 bg-emerald-50 p-3 text-sm font-medium text-pine">
-              Completed points: {completedPoints}
-            </div>
-
-            <button
-              className="rounded-lg bg-ink px-4 py-2 font-semibold text-white"
-              disabled={submitMutation.isPending || submitted || !planQuery.data?.teamId}
-            >
-              {submitMutation.isPending ? 'Submitting...' : 'Submit Review'}
-            </button>
-          </form>
-        ) : (
-          <div className="space-y-3 rounded-2xl border border-pine/30 bg-emerald-50 p-4">
-            <p className="text-lg font-bold text-pine">Sprint review submitted.</p>
-            <p className="text-sm text-pine/80">Total completed points: {completedPoints}</p>
-            <Link className="inline-block rounded-lg bg-pine px-4 py-2 text-sm font-semibold text-white" to="/teams">
-              Back to Teams
-            </Link>
           </div>
-        )}
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-100">Sprint goal result</p>
+            <select className="w-full rounded-lg border border-ink/20 px-3 py-2" {...form.register('goalResult')}>
+              <option value="YES">Yes</option>
+              <option value="PARTIALLY">Partially</option>
+              <option value="NO">No</option>
+            </select>
+          </div>
+
+          <div>
+            <p className="mb-2 text-sm font-semibold text-slate-100">Blocker note (optional)</p>
+            <textarea
+              className="h-24 w-full rounded-lg border border-ink/20 px-3 py-2"
+              {...form.register('blockerNote')}
+            />
+          </div>
+
+          <div className="rounded-lg border border-pine/25 bg-emerald-50 p-3 text-sm font-medium text-pine">
+            Completed points: {completedPoints}
+          </div>
+
+          <button
+            className="rounded-lg bg-ink px-4 py-2 font-semibold text-white"
+            disabled={submitMutation.isPending || !planQuery.data?.teamId}
+          >
+            {submitMutation.isPending ? 'Submitting...' : 'Submit Review'}
+          </button>
+        </form>
       </section>
     </PageLayout>
   );

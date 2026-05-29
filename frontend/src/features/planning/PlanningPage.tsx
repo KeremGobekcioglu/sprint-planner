@@ -12,6 +12,7 @@ import type { TeamDomain } from '../../types/team';
 import { DomainSelector } from './DomainSelector';
 import { EpicInput } from './EpicInput';
 import { usePlanning } from './usePlanning';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 interface PlanningFormValues {
   epicsText: string;
@@ -114,6 +115,10 @@ export function PlanningPage() {
             <div className="mb-1 flex items-center gap-2">
               <span>🌱</span>
               <span className="font-semibold text-blue-200">Fresh Start</span>
+              <HelpTooltip
+                text="First sprint with this team. The AI uses conservative defaults and will learn from your edits."
+                position="right"
+              />
             </div>
             <p className="text-sm text-blue-300/80">
               This team has no sprint history. The AI will use conservative defaults for this sprint.
@@ -127,6 +132,10 @@ export function PlanningPage() {
               <span className="font-semibold text-teal-200">
                 Continuous Mode — {modeData.completedSprints} sprints completed
               </span>
+              <HelpTooltip
+                text="The AI has learned from past sprints and will apply your team's preferences automatically."
+                position="right"
+              />
             </div>
             <p className="mb-2 text-sm text-teal-300/80">
               The AI will use your team's sprint history and learned preferences for this plan.
@@ -180,7 +189,7 @@ const payload: PlanningRequest = {
               onSuccess: (plan) => {
                 setSprint(plan.sprintId);
                 setPlanGenerated(true);
-                setTimeout(() => navigate('/dashboard'), 2000);
+                setTimeout(() => navigate('/dashboard', { replace: true }), 2000);
               },
             });
           })}
@@ -230,6 +239,7 @@ const payload: PlanningRequest = {
           <div>
             <div className="flex items-center justify-between">
               <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
+
               <button
                 type="button"
                 className="rounded-lg bg-blue-500/85 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
@@ -254,12 +264,24 @@ const payload: PlanningRequest = {
           </div>
 
           <div>
-            <p className="mb-1 text-sm font-semibold text-slate-100">Domain</p>
+            <div className="mb-1 flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-slate-100">Domain</p>
+              <HelpTooltip
+                text="The AI uses domain-specific rules. Fintech adds compliance tasks, E-Commerce adds analytics and A/B test tasks."
+                position="right"
+              />
+            </div>
             <DomainSelector value={form.watch('domain')} onChange={(domain) => form.setValue('domain', domain)} />
           </div>
 
           <div>
-            <p className="mb-1 text-sm font-semibold text-slate-100">Sprint Goal</p>
+            <div className="mb-1 flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-slate-100">Sprint Goal</p>
+              <HelpTooltip
+                text="A one-sentence description of what this sprint should achieve. The AI uses this to focus task generation."
+                position="right"
+              />
+            </div>
             <input
               className="w-full rounded-lg border border-slate-500/40 px-3 py-2"
               placeholder="What does success look like?"
@@ -268,21 +290,36 @@ const payload: PlanningRequest = {
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-semibold text-slate-100">Days Off by Developer</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-slate-100">Days Off by Developer</p>
+              <HelpTooltip
+                text="Mark how many days each developer is unavailable. Reduces their capacity for this sprint."
+                position="right"
+              />
+            </div>
             {developersQuery.isLoading ? <LoadingSpinner label="Loading developers..." /> : null}
             {developersQuery.isError ? <ErrorBanner message="Could not load developers for days-off input." /> : null}
             {developers.map((developer) => (
               <label key={developer.id} className="flex items-center justify-between gap-4 rounded-lg border border-white/10 bg-slate-950/30 p-3">
                 <span className="text-sm font-medium text-slate-100">{developer.name}</span>
-                <input
-                  type="number"
-                  className="w-24 rounded-lg border border-slate-500/40 px-2 py-1"
-                  min={0}
-                  {...form.register(`daysOff.${developer.id}` as const, {
-                    valueAsNumber: true,
-                    min: 0,
-                  })}
-                />
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-xs text-slate-500">
+                    {developer.baseVelocity} pts/sprint
+                    <HelpTooltip
+                      text="Story points this developer can complete in one sprint. Used to calculate capacity."
+                      position="top"
+                    />
+                  </span>
+                  <input
+                    type="number"
+                    className="w-24 rounded-lg border border-slate-500/40 px-2 py-1"
+                    min={0}
+                    {...form.register(`daysOff.${developer.id}` as const, {
+                      valueAsNumber: true,
+                      min: 0,
+                    })}
+                  />
+                </div>
               </label>
             ))}
           </div>

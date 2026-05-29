@@ -13,6 +13,7 @@ import type { Task } from '../../types/sprint';
 import { DeveloperLane } from './DeveloperLane';
 import { MismatchWarning } from './MismatchWarning';
 import { useReview } from './useReview';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 export function ReviewPage() {
   const { sprintId } = useParams();
@@ -22,6 +23,9 @@ export function ReviewPage() {
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [trelloNoticeDismissed, setTrelloNoticeDismissed] = useState(
+    () => localStorage.getItem('trello_notice_dismissed') === 'true',
+  );
   const effectiveSprintId = planQuery.data?.sprintId;
 
   const deleteMutation = useMutation({
@@ -94,6 +98,7 @@ export function ReviewPage() {
   });
 
   const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
+  const showTrelloNotice = Boolean(planQuery.data) && !isTrelloConnected && !trelloNoticeDismissed;
 
   return (
     <PageLayout
@@ -102,28 +107,39 @@ export function ReviewPage() {
       actions={
         <div className="flex items-center gap-2">
           {planQuery.data?.sprintStatus === 'PLANNING' && (
-            <button
-              className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              {deleteMutation.isPending ? 'Deleting...' : 'Discard Sprint'}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={deleteMutation.isPending}
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Discard Sprint'}
+              </button>
+              <HelpTooltip
+                text="Permanently deletes this sprint plan. You will need to run planning again."
+                position="bottom"
+              />
+            </div>
           )}
           {pushTrelloMutation.isSuccess ? (
             <span className="rounded-lg bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-300">
               Pushed to Trello ✓
             </span>
           ) : (
-            <span
-              title={
-                !isTrelloConnected
-                  ? 'Connect Trello on your profile first'
-                  : !hasTrelloBoard && teamQuery.data !== undefined
-                    ? 'Link a Trello board in team setup first'
-                    : undefined
-              }
-            >
+            <div className="flex items-center gap-1.5">
+              <HelpTooltip
+                text="Approving locks the plan and pushes it to your linked Trello board. Make all edits before approving."
+                position="bottom"
+              />
+              <span
+                title={
+                  !isTrelloConnected
+                    ? 'Connect Trello on your profile first'
+                    : !hasTrelloBoard && teamQuery.data !== undefined
+                      ? 'Link a Trello board in team setup first'
+                      : undefined
+                }
+              >
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={
@@ -156,6 +172,7 @@ export function ReviewPage() {
                     : 'Approve & Push to Trello'}
               </button>
             </span>
+            </div>
           )}
         </div>
       }
@@ -163,10 +180,10 @@ export function ReviewPage() {
       <div className="mb-4">
         <button
           type="button"
-          onClick={() => navigate(teamId ? `/teams/${teamId}/plan` : '/teams')}
+          onClick={() => navigate('/dashboard')}
           className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
         >
-          ← Back to Planning
+          ← Back to Dashboard
         </button>
       </div>
       <section className="space-y-5">
@@ -242,6 +259,48 @@ export function ReviewPage() {
 
         {deleteMutation.isError && (
           <ErrorBanner message="Failed to delete the sprint." error={deleteMutation.error} />
+        )}
+
+        {showTrelloNotice && (
+          <div className="flex items-center justify-between rounded-xl border border-sky-500/30 bg-sky-900/20 px-4 py-3 text-sm">
+            <span className="text-sky-200">
+              🔗 Connect your Trello account to push this sprint plan directly to your board.
+            </span>
+            <div className="ml-4 flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/profile#trello')}
+                className="rounded-lg bg-sky-500/85 px-3 py-1.5 text-xs font-semibold text-white hover:bg-sky-600/85"
+              >
+                Connect Trello →
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  localStorage.setItem('trello_notice_dismissed', 'true');
+                  setTrelloNoticeDismissed(true);
+                }}
+                className="rounded-lg border border-sky-500/30 px-3 py-1.5 text-xs font-medium text-sky-300 hover:bg-sky-900/40"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {planQuery.data && allTasks.length === 0 && (
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-6 py-12 text-center">
+            <p className="text-slate-300">
+              This sprint has no tasks yet. Something may have gone wrong during planning.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate(teamId ? `/teams/${teamId}/plan` : '/teams')}
+              className="mt-4 rounded-lg bg-blue-500/85 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600/85"
+            >
+              Back to Planning
+            </button>
+          </div>
         )}
 
         <div className="grid gap-4 pb-32 md:grid-cols-2 xl:grid-cols-3">

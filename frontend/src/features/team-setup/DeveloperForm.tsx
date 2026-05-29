@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { CapabilityTag, Developer } from '../../types/team';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 interface DeveloperFormValues {
   name: string;
@@ -77,7 +78,13 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
       </button>
 
       <div className="sm:col-span-2 lg:col-span-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Capabilities</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Capabilities</p>
+          <HelpTooltip
+            text="Used for task routing. The AI only assigns backend tasks to developers with backend capability."
+            position="right"
+          />
+        </div>
         <div className="mt-2 flex flex-wrap gap-2">
           {capabilityOptions.map((capability) => (
             <label

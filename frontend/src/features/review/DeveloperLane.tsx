@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Task, UserStory } from '../../types/sprint';
 import { TaskCard } from './TaskCard';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 interface DeveloperLaneProps {
   developerId: string;
@@ -79,11 +80,19 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
           )}
         </div>
         {!isUnassigned && (
-          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-700">
-            <div
-              className={`h-full rounded-full transition-all ${barColor}`}
-              style={{ width: `${fillPercent}%` }}
-            />
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-700">
+                <div
+                  className={`h-full rounded-full transition-all ${barColor}`}
+                  style={{ width: `${fillPercent}%` }}
+                />
+              </div>
+              <HelpTooltip
+                text="Blue = assigned points. Gray = remaining capacity. Red = over capacity."
+                position="left"
+              />
+            </div>
           </div>
         )}
       </header>

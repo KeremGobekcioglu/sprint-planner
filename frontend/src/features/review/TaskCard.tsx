@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { Task } from '../../types/sprint';
+import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 interface TaskCardProps {
   task: Task;
@@ -85,16 +86,22 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred }: TaskCardProps) {
             onBlur={() => commit('storyPoints', getValues('storyPoints'))}
           />
         </div>
-        <button
-          className={`rounded-md border px-2 py-1 text-xs transition-colors ${
-            isDeferred
-              ? 'border-amber-400/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
-              : 'border-ink/20 hover:bg-ink/10 text-slate-300'
-          }`}
-          onClick={() => onDefer(task.id)}
-        >
-          {isDeferred ? 'Un-defer' : 'Defer'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+              isDeferred
+                ? 'border-amber-400/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+                : 'border-ink/20 hover:bg-ink/10 text-slate-300'
+            }`}
+            onClick={() => onDefer(task.id)}
+          >
+            {isDeferred ? 'Un-defer' : 'Defer'}
+          </button>
+          <HelpTooltip
+            text="Deferred tasks are removed from this sprint and logged. The AI will factor this into future planning."
+            position="top"
+          />
+        </div>
       </div>
     </article>
   );
