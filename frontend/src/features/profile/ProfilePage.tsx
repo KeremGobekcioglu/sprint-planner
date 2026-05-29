@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useProfile } from '../../hooks/useProfile';
 import { useTeamMemory } from '../../hooks/useTeamMemory';
-import { clearTeamProfile } from '../../api/profileApi';
+import { clearTeamProfile, getTrelloStatus, disconnectTrello } from '../../api/profileApi';
 import type { TeamSummary } from '../../api/profileApi';
 
 function MemoryPanel({ team }: { team: TeamSummary }) {
@@ -94,9 +94,48 @@ function MemoryPanel({ team }: { team: TeamSummary }) {
 
 export function ProfilePage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const { profileQuery, statsQuery, updateNameMutation } = useProfile();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const [trelloConnectSuccess, setTrelloConnectSuccess] = useState(false);
+
+  // Check for success state from TrelloCallbackPage
+  useEffect(() => {
+    if (location.state?.trelloConnected) {
+      setTrelloConnectSuccess(true);
+      // Clear the state so it doesn't persist on refresh
+      window.history.replaceState({}, document.title);
+      // Auto-hide after 5 seconds
+      setTimeout(() => setTrelloConnectSuccess(false), 5000);
+    }
+  }, [location.state]);
+
+  const trelloStatusQuery = useQuery({
+    queryKey: ['trello-status'],
+    queryFn: getTrelloStatus,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
+  const disconnectTrelloMutation = useMutation({
+    mutationFn: disconnectTrello,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trello-status'] });
+    },
+  });
+
+  function handleConnectTrello() {
+    const TRELLO_API_KEY = import.meta.env.VITE_TRELLO_API_KEY;
+    if (!TRELLO_API_KEY) {
+      console.error('VITE_TRELLO_API_KEY is not set');
+      return;
+    }
+    const returnUrl = `${window.location.origin}/trello/callback`;
+    const trelloAuthUrl = `https://trello.com/1/authorize?key=${TRELLO_API_KEY}&name=Sprint+Planner&expiration=never&scope=read,write&response_type=token&callback_method=fragment&return_url=${encodeURIComponent(returnUrl)}`;
+    window.open(trelloAuthUrl, '_blank');
+  }
 
   function startEditName() {
     setNameInput(profileQuery.data?.name ?? '');
@@ -175,6 +214,60 @@ export function ProfilePage() {
               </span>
             </div>
           ) : null}
+        </section>
+
+        {/* Section — Trello Connection */}
+        <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
+          <h2 className="text-lg font-semibold text-slate-100">Trello Connection</h2>
+
+          {trelloConnectSuccess && (
+            <div className="rounded-lg bg-emerald-500/20 px-4 py-2 text-sm text-emerald-300">
+              Trello connected successfully!
+            </div>
+          )}
+
+          {trelloStatusQuery.isLoading ? <LoadingSpinner label="Checking Trello status..." /> : null}
+          {trelloStatusQuery.isError ? <ErrorBanner message="Could not check Trello connection status." /> : null}
+
+          {trelloStatusQuery.data ? (
+            trelloStatusQuery.data.connected ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 text-lg">✓</span>
+                  <span className="text-slate-200">Trello connected</span>
+                </div>
+                <button
+                  onClick={() => disconnectTrelloMutation.mutate()}
+                  disabled={disconnectTrelloMutation.isPending}
+                  className="rounded-lg border border-rose-500/40 bg-rose-900/20 px-4 py-2 text-sm font-medium text-rose-300 hover:bg-rose-900/30 disabled:opacity-50"
+                >
+                  {disconnectTrelloMutation.isPending ? 'Disconnecting...' : 'Disconnect Trello'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-400">
+                  Connect your Trello account to push sprint plans directly to your boards.
+                </p>
+                {!import.meta.env.VITE_TRELLO_API_KEY ? (
+                  <p className="text-sm text-amber-400">
+                    Trello API key not configured. Set VITE_TRELLO_API_KEY in your environment.
+                  </p>
+                ) : (
+                  <button
+                    onClick={handleConnectTrello}
+                    className="rounded-lg bg-sky-500/85 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 hover:bg-sky-600/85"
+                  >
+                    Connect Trello
+                  </button>
+                )}
+              </div>
+            )
+          ) : null}
+
+          {disconnectTrelloMutation.isError && (
+            <ErrorBanner message="Failed to disconnect Trello." error={disconnectTrelloMutation.error} />
+          )}
         </section>
 
         {/* Section 2 — My Teams */}

@@ -21,21 +21,35 @@ public class TrelloApiClient {
         return config;
     }
 
-    private void validateCredentials() {
-        if (config.getApiKey() == null || config.getApiKey().isBlank() ||
-                config.getToken() == null || config.getToken().isBlank()) {
+    /**
+     * Resolves the token to use for Trello API calls.
+     * Prefers the user token if provided, falls back to server-side config token.
+     */
+    public String resolveToken(String userToken) {
+        if (userToken != null && !userToken.isBlank()) {
+            return userToken;
+        }
+        if (config.getToken() != null && !config.getToken().isBlank()) {
+            return config.getToken();
+        }
+        throw new IllegalStateException("No Trello token available. Connect your Trello account first.");
+    }
+
+    private void validateApiKey() {
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
             throw new IllegalStateException(
-                    "Trello credentials not configured. Set TRELLO_API_KEY and TRELLO_TOKEN environment variables.");
+                    "Trello API key not configured. Set TRELLO_API_KEY environment variable.");
         }
     }
 
-    private String auth() {
-        return "key=" + config.getApiKey() + "&token=" + config.getToken();
+    private String auth(String token) {
+        return "key=" + config.getApiKey() + "&token=" + token;
     }
 
-    public List<TrelloList> getBoardLists(String boardId) {
-        validateCredentials();
-        String url = config.getBaseUrl() + "/boards/" + boardId + "/lists?" + auth();
+    public List<TrelloList> getBoardLists(String boardId, String token) {
+        validateApiKey();
+        String resolvedToken = resolveToken(token);
+        String url = config.getBaseUrl() + "/boards/" + boardId + "/lists?" + auth(resolvedToken);
         try {
             TrelloList[] lists = restTemplate.getForObject(url, TrelloList[].class);
             return lists == null ? List.of() : List.of(lists);
@@ -44,19 +58,20 @@ public class TrelloApiClient {
         }
     }
 
-    public String findOrCreateList(String boardId, String listName) {
-        validateCredentials();
-        List<TrelloList> existing = getBoardLists(boardId);
+    public String findOrCreateList(String boardId, String listName, String token) {
+        validateApiKey();
+        List<TrelloList> existing = getBoardLists(boardId, token);
         return existing.stream()
                 .filter(l -> l.name().equalsIgnoreCase(listName))
                 .map(TrelloList::id)
                 .findFirst()
-                .orElseGet(() -> createList(boardId, listName));
+                .orElseGet(() -> createList(boardId, listName, token));
     }
 
-    private String createList(String boardId, String listName) {
+    private String createList(String boardId, String listName, String token) {
+        String resolvedToken = resolveToken(token);
         String url = config.getBaseUrl() + "/boards/" + boardId + "/lists?"
-                + auth() + "&name=" + encode(listName) + "&idBoard=" + boardId;
+                + auth(resolvedToken) + "&name=" + encode(listName) + "&idBoard=" + boardId;
         try {
             TrelloList created = restTemplate.postForObject(url, null, TrelloList.class);
             if (created == null || created.id() == null) {
@@ -71,10 +86,11 @@ public class TrelloApiClient {
     }
 
     @SuppressWarnings("rawtypes")
-    public String createCard(String listId, String name, String description, String trelloMemberId) {
-        validateCredentials();
+    public String createCard(String listId, String name, String description, String trelloMemberId, String token) {
+        validateApiKey();
+        String resolvedToken = resolveToken(token);
         String url = config.getBaseUrl() + "/cards?"
-                + auth() + "&idList=" + listId
+                + auth(resolvedToken) + "&idList=" + listId
                 + "&name=" + encode(name)
                 + "&desc=" + encode(description);
         if (trelloMemberId != null && !trelloMemberId.isBlank()) {
@@ -93,10 +109,11 @@ public class TrelloApiClient {
         }
     }
 
-    public List<TrelloMemberDto> getBoardMembers(String boardId) {
-        validateCredentials();
+    public List<TrelloMemberDto> getBoardMembers(String boardId, String token) {
+        validateApiKey();
+        String resolvedToken = resolveToken(token);
         String url = config.getBaseUrl() + "/boards/" + boardId + "/members?"
-                + auth() + "&fields=id,fullName,username";
+                + auth(resolvedToken) + "&fields=id,fullName,username";
         try {
             TrelloMemberDto[] members = restTemplate.getForObject(url, TrelloMemberDto[].class);
             return members == null ? List.of() : List.of(members);
@@ -105,9 +122,10 @@ public class TrelloApiClient {
         }
     }
 
-    public List<TrelloList> getUserBoards() {
-        validateCredentials();
-        String url = config.getBaseUrl() + "/members/me/boards?" + auth() + "&fields=name,id,url";
+    public List<TrelloList> getUserBoards(String token) {
+        validateApiKey();
+        String resolvedToken = resolveToken(token);
+        String url = config.getBaseUrl() + "/members/me/boards?" + auth(resolvedToken) + "&fields=name,id,url";
         try {
             TrelloList[] boards = restTemplate.getForObject(url, TrelloList[].class);
             return boards == null ? List.of() : List.of(boards);

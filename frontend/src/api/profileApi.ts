@@ -54,3 +54,21 @@ export const getTeamMemory = async (teamId: UUID): Promise<TeamMemoryResponse> =
 
 export const clearTeamProfile = (teamId: UUID): Promise<void> =>
   api.delete(`/api/teams/${teamId}/memory/profile`).then(() => undefined);
+
+export interface TrelloStatusResponse {
+  connected: boolean;
+  username: string | null;
+}
+
+export const getTrelloStatus = async (): Promise<TrelloStatusResponse> => {
+  const response = await api.get<TrelloStatusResponse>('/api/auth/trello/status');
+  return response.data;
+};
+
+export const saveTrelloToken = async (token: string): Promise<void> => {
+  await api.post('/api/auth/trello/token', { token });
+};
+
+export const disconnectTrello = async (): Promise<void> => {
+  await api.delete('/api/auth/trello/token');
+};

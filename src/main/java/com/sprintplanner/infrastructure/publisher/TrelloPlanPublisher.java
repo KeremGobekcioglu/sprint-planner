@@ -32,7 +32,7 @@ public class TrelloPlanPublisher {
         this.developerRepository = developerRepository;
     }
 
-    public void publishSprint(UUID sprintId, String trelloBoardId) {
+    public void publishSprint(UUID sprintId, String trelloBoardId, String userToken) {
         if (trelloBoardId == null || trelloBoardId.isBlank()) {
             throw new IllegalArgumentException("No Trello board linked to this team");
         }
@@ -48,7 +48,7 @@ public class TrelloPlanPublisher {
         for (UserStory story : sprint.getUserStories()) {
             String listId;
             try {
-                listId = trelloApiClient.findOrCreateList(trelloBoardId, story.getEpicTitle());
+                listId = trelloApiClient.findOrCreateList(trelloBoardId, story.getEpicTitle(), userToken);
             } catch (Exception e) {
                 logger.error("Failed to create/find list for epic '{}': {}", story.getEpicTitle(), e.getMessage());
                 continue;
@@ -70,7 +70,7 @@ public class TrelloPlanPublisher {
                         }
                     }
                     String desc = buildCardDescription(task, devName);
-                    String cardId = trelloApiClient.createCard(listId, task.getTitle(), desc, trelloMemberId);
+                    String cardId = trelloApiClient.createCard(listId, task.getTitle(), desc, trelloMemberId, userToken);
                     task.setTrelloCardId(cardId);
                     taskJpaRepository.save(task);
                     cardCount++;

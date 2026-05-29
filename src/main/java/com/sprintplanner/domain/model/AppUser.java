@@ -32,6 +32,9 @@ public class AppUser {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "trello_token")
+    private String trelloToken;
+
     public AppUser() {}
 
     public AppUser(UUID id, String email, String name, String role, String passwordHash, Instant createdAt) {
@@ -51,6 +54,7 @@ public class AppUser {
     public String getRole() { return role; }
     public String getPasswordHash() { return passwordHash; }
     public Instant getCreatedAt() { return createdAt; }
+    public String getTrelloToken() { return trelloToken; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -60,5 +64,6 @@ public class AppUser {
     public void setRole(String role) { this.role = role; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
+    public void setTrelloToken(String trelloToken) { this.trelloToken = trelloToken; }
 }
 

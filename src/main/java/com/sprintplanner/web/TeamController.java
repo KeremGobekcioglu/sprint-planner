@@ -1,6 +1,7 @@
 package com.sprintplanner.web;
 
 import com.sprintplanner.application.TeamService;
+import com.sprintplanner.domain.model.AppUser;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.port.out.DeveloperRepository;
@@ -10,6 +11,7 @@ import com.sprintplanner.domain.port.out.TeamRepository;
 import com.sprintplanner.infrastructure.external.TrelloApiClient;
 import com.sprintplanner.infrastructure.external.TrelloList;
 import com.sprintplanner.infrastructure.external.TrelloMemberDto;
+import com.sprintplanner.infrastructure.persistence.JpaUserRepository;
 import com.sprintplanner.web.dto.AddDeveloperHttpRequest;
 import com.sprintplanner.web.dto.CreateTeamHttpRequest;
 import com.sprintplanner.web.dto.DeveloperHttpDto;
@@ -44,16 +46,18 @@ public class TeamController {
     private final MemoryReader memoryReader;
     private final MemoryWriter memoryWriter;
     private final TrelloApiClient trelloApiClient;
+    private final JpaUserRepository userRepository;
 
     public TeamController(TeamService teamService, TeamRepository teamRepository,
             DeveloperRepository developerRepository, MemoryReader memoryReader,
-            MemoryWriter memoryWriter, TrelloApiClient trelloApiClient) {
+            MemoryWriter memoryWriter, TrelloApiClient trelloApiClient, JpaUserRepository userRepository) {
         this.teamService = teamService;
         this.teamRepository = teamRepository;
         this.developerRepository = developerRepository;
         this.memoryReader = memoryReader;
         this.memoryWriter = memoryWriter;
         this.trelloApiClient = trelloApiClient;
+        this.userRepository = userRepository;
     }
 
     @GetMapping
@@ -186,7 +190,17 @@ public class TeamController {
 
     @GetMapping("/trello/boards")
     public ResponseEntity<List<TrelloList>> getTrelloBoards() {
-        List<TrelloList> boards = trelloApiClient.getUserBoards();
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        AppUser user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        String userToken = user.getTrelloToken();
+        if (userToken == null || userToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Connect your Trello account first. Go to Profile → Connect Trello.");
+        }
+
+        List<TrelloList> boards = trelloApiClient.getUserBoards(userToken);
         return ResponseEntity.ok(boards);
     }
 
@@ -214,6 +228,15 @@ public class TeamController {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         boolean isAdmin = SecurityUtils.isAdmin();
 
+        AppUser user = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        String userToken = user.getTrelloToken();
+        if (userToken == null || userToken.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Connect your Trello account first. Go to Profile → Connect Trello.");
+        }
+
         Team team = teamRepository.findById(teamId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
 
@@ -225,7 +248,7 @@ public class TeamController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No Trello board linked to this team");
         }
 
-        List<TrelloMemberDto> members = trelloApiClient.getBoardMembers(team.getTrelloBoardId());
+        List<TrelloMemberDto> members = trelloApiClient.getBoardMembers(team.getTrelloBoardId(), userToken);
         return ResponseEntity.ok(members);
     }
 

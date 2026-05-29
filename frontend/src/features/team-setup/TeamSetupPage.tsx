@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
@@ -13,6 +13,7 @@ import {
   getTrelloMembers, linkTrelloMember,
 } from '../../api/teamApi';
 import type { TrelloMember } from '../../api/teamApi';
+import { getTrelloStatus } from '../../api/profileApi';
 import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
@@ -88,6 +89,15 @@ export function TeamSetupPage() {
     staleTime: 1000 * 60 * 2,
     retry: false,
   });
+
+  const trelloStatusQuery = useQuery({
+    queryKey: ['trello-status'],
+    queryFn: getTrelloStatus,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
+  const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
 
   const teamForm = useForm<TeamFormValues>({
     defaultValues: {
@@ -238,27 +248,44 @@ export function TeamSetupPage() {
             <>
               <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
                 <p className="text-sm font-semibold text-slate-200">Trello Board</p>
-                {selectedTeam.trelloBoardId ? (
-                  <p className="text-xs text-slate-400">
-                    Currently linked: <span className="font-mono text-slate-300">{selectedTeam.trelloBoardId}</span>
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-500">No Trello board linked yet.</p>
+
+                {!isTrelloConnected && (
+                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
+                    <p className="text-amber-300">
+                      Connect your Trello account on the{' '}
+                      <Link to="/profile" className="underline hover:text-amber-200">
+                        Profile page
+                      </Link>{' '}
+                      to enable Trello features.
+                    </p>
+                  </div>
                 )}
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 disabled:opacity-50"
-                    onClick={() => trelloBoardsQuery.refetch()}
-                    disabled={trelloBoardsQuery.isFetching}
-                  >
-                    {trelloBoardsQuery.isFetching ? 'Fetching...' : 'Fetch my Trello boards'}
-                  </button>
-                </div>
-                {trelloBoardsQuery.isError ? (
-                  <ErrorBanner message="Could not fetch Trello boards. Check that TRELLO_API_KEY and TRELLO_TOKEN are set." />
+
+                {isTrelloConnected && (
+                  <>
+                    {selectedTeam.trelloBoardId ? (
+                      <p className="text-xs text-slate-400">
+                        Currently linked: <span className="font-mono text-slate-300">{selectedTeam.trelloBoardId}</span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500">No Trello board linked yet.</p>
+                    )}
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 disabled:opacity-50"
+                        onClick={() => trelloBoardsQuery.refetch()}
+                        disabled={trelloBoardsQuery.isFetching}
+                      >
+                        {trelloBoardsQuery.isFetching ? 'Fetching...' : 'Fetch my Trello boards'}
+                      </button>
+                    </div>
+                  </>
+                )}
+                {isTrelloConnected && trelloBoardsQuery.isError ? (
+                  <ErrorBanner message="Could not fetch Trello boards. Connect your Trello account first." />
                 ) : null}
-                {trelloBoardsQuery.data && trelloBoardsQuery.data.length > 0 ? (
+                {isTrelloConnected && trelloBoardsQuery.data && trelloBoardsQuery.data.length > 0 ? (
                   <div className="space-y-2">
                     <select
                       className="w-full rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-200"
@@ -286,37 +313,39 @@ export function TeamSetupPage() {
                     </button>
                   </div>
                 ) : null}
-                <div className="flex gap-2 items-center">
-                  <input
-                    className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm bg-slate-900 text-slate-200 placeholder:text-slate-500"
-                    placeholder="Or paste board ID manually"
-                    value={trelloBoardInput}
-                    onChange={(e) => setTrelloBoardInput(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                    disabled={!trelloBoardInput.trim() || linkBoardMutation.isPending}
-                    onClick={() => {
-                      const boardId = trelloBoardInput.trim();
-                      if (boardId) {
-                        linkBoardMutation.mutate({ teamId: selectedTeam.id, boardId });
-                      }
-                    }}
-                  >
-                    Link
-                  </button>
-                </div>
-                {linkBoardMutation.isError ? (
+                {isTrelloConnected && (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm bg-slate-900 text-slate-200 placeholder:text-slate-500"
+                      placeholder="Or paste board ID manually"
+                      value={trelloBoardInput}
+                      onChange={(e) => setTrelloBoardInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={!trelloBoardInput.trim() || linkBoardMutation.isPending}
+                      onClick={() => {
+                        const boardId = trelloBoardInput.trim();
+                        if (boardId) {
+                          linkBoardMutation.mutate({ teamId: selectedTeam.id, boardId });
+                        }
+                      }}
+                    >
+                      Link
+                    </button>
+                  </div>
+                )}
+                {isTrelloConnected && linkBoardMutation.isError ? (
                   <ErrorBanner message="Failed to link Trello board." error={linkBoardMutation.error} />
                 ) : null}
-                {linkBoardMutation.isSuccess ? (
+                {isTrelloConnected && linkBoardMutation.isSuccess ? (
                   <p className="text-xs text-emerald-400">Board linked successfully.</p>
                 ) : null}
               </div>
 
-              {/* Sync Trello Members — only when a board is linked */}
-              {selectedTeam.trelloBoardId ? (
+              {/* Sync Trello Members — only when connected and board is linked */}
+              {isTrelloConnected && selectedTeam.trelloBoardId ? (
                 <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-slate-200">Sync Trello Members</p>

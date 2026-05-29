@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { deleteSprint } from '../../api/sprintApi';
+import { getTrelloStatus } from '../../api/profileApi';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
@@ -85,6 +86,15 @@ export function ReviewPage() {
   const teamId = planQuery.data?.teamId;
   const hasTrelloBoard = Boolean(teamQuery.data?.trelloBoardId);
 
+  const trelloStatusQuery = useQuery({
+    queryKey: ['trello-status'],
+    queryFn: getTrelloStatus,
+    staleTime: 1000 * 60 * 5,
+    retry: false,
+  });
+
+  const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
+
   return (
     <PageLayout
       title="Review"
@@ -105,7 +115,15 @@ export function ReviewPage() {
               Pushed to Trello ✓
             </span>
           ) : (
-            <span title={!hasTrelloBoard && teamQuery.data !== undefined ? 'Link a Trello board in team setup first' : undefined}>
+            <span
+              title={
+                !isTrelloConnected
+                  ? 'Connect Trello on your profile first'
+                  : !hasTrelloBoard && teamQuery.data !== undefined
+                    ? 'Link a Trello board in team setup first'
+                    : undefined
+              }
+            >
               <button
                 className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={
@@ -114,7 +132,8 @@ export function ReviewPage() {
                   approveMutation.isPending ||
                   pushTrelloMutation.isPending ||
                   !effectiveSprintId ||
-                  !hasTrelloBoard
+                  !hasTrelloBoard ||
+                  !isTrelloConnected
                 }
                 onClick={() => {
                   if (!effectiveSprintId) return;

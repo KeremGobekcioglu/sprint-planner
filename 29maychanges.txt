@@ -1,0 +1,81 @@
+The implementation is complete. Let me provide a summary of all changes made:
+
+  Summary of Changes
+
+  Backend Changes
+
+  1. Database Migration (V8)
+  - Created V8__add_user_trello_token.sql - adds trello_token TEXT column to app_user table
+
+  2. AppUser Entity
+  - Added trelloToken field with @Column(name = "trello_token")
+  - Added getter getTrelloToken() and setter setTrelloToken()
+
+  3. TrelloAuthController (new)
+  - POST /api/auth/trello/token - saves user's Trello token
+  - GET /api/auth/trello/status - returns {connected: boolean, username: null}
+  - DELETE /api/auth/trello/token - disconnects Trello (sets token to null)
+
+  4. TrelloTokenRequest (new)
+  - Record: TrelloTokenRequest(String token)
+
+  5. TrelloApiClient
+  - Added resolveToken(String userToken) helper that prefers user token, falls back to server
+  config
+  - Changed validateCredentials() to validateApiKey() (only checks API key)
+  - Updated all methods to accept explicit String token parameter:
+    - getBoardLists(boardId, token)
+    - findOrCreateList(boardId, listName, token)
+    - createCard(listId, name, description, trelloMemberId, token)
+    - getBoardMembers(boardId, token)
+    - getUserBoards(token)
+
+  6. TrelloPlanPublisher
+  - Updated publishSprint(sprintId, trelloBoardId, userToken) to accept user token
+
+  7. SprintPlannerController
+  - Injected JpaUserRepository
+  - Updated pushToTrello() to load user token and pass to publisher
+  - Returns 400 "Connect your Trello account first" if no token
+
+  8. TeamController
+  - Injected JpaUserRepository
+  - Updated getTrelloBoards() to require user token
+  - Updated getTrelloMembers() to require user token
+
+  9. SecurityConfig
+  - Changed from /api/auth/** permitAll to explicit /api/auth/login, /api/auth/register permitAll
+  - This ensures /api/auth/trello/* endpoints require authentication
+
+  Frontend Changes
+
+  10. TrelloCallbackPage.tsx (new)
+  - Handles OAuth callback from Trello
+  - Parses token from URL fragment #token=abc123
+  - POSTs token to backend
+  - Redirects to /profile on success
+
+  11. router.tsx
+  - Added public route /trello/callback → TrelloCallbackPage
+
+  12. profileApi.ts
+  - Added getTrelloStatus(), saveTrelloToken(), disconnectTrello()
+
+  13. ProfilePage.tsx
+  - Added "Trello Connection" section
+  - Shows connect button when not connected
+  - Shows disconnect button when connected
+  - Handles success message from callback redirect
+
+  14. TeamSetupPage.tsx
+  - Checks Trello connection status on mount
+  - Shows notice with link to Profile if not connected
+  - Hides Trello board/member features when not connected
+
+  15. ReviewPage.tsx
+  - Checks Trello connection status
+  - Disables "Approve & Push to Trello" button if not connected
+  - Shows tooltip "Connect Trello on your profile first"
+
+  16. frontend/.env.example (new)
+  - Documents VITE_TRELLO_API_KEY environment variable

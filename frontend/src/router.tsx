@@ -1,6 +1,7 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
 import { SignupPage } from './features/auth/SignupPage';
+import { TrelloCallbackPage } from './features/auth/TrelloCallbackPage';
 import { TeamSetupPage } from './features/team-setup/TeamSetupPage';
 import { PlanningPage } from './features/planning/PlanningPage';
 import { ReviewPage } from './features/review/ReviewPage';
@@ -21,6 +22,10 @@ export const router = createBrowserRouter([
   {
     path: '/signup',
     element: <SignupPage />,
+  },
+  {
+    path: '/trello/callback',
+    element: <TrelloCallbackPage />,
   },
   {
     path: '/dashboard',
