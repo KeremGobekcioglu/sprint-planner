@@ -89,4 +89,9 @@ public class JpaSprintRepository implements SprintRepository {
     public List<Sprint> findStalePlanningSprintsBefore(Instant cutoff) {
         return sprintJpaRepository.findByStatusAndPlannedAtBefore(Sprint.Status.PLANNING, cutoff);
     }
+
+    @Override
+    public long countByTeamId(UUID teamId) {
+        return sprintJpaRepository.countByTeamId(teamId);
+    }
 }

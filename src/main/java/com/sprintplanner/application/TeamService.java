@@ -4,6 +4,7 @@ import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
+import com.sprintplanner.domain.service.CapabilityInferenceService;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -50,7 +51,7 @@ public class TeamService {
         Team team = getTeam(teamId, currentUserId, isAdmin);
         Developer developer = new Developer(UUID.randomUUID(), team.getId(), name, role, baseVelocity);
         List<String> resolvedCapabilities = (capabilities == null || capabilities.isEmpty())
-            ? inferCapabilitiesFromRole(role)
+            ? CapabilityInferenceService.inferFromRole(role)
             : capabilities;
         developer.setCapabilities(resolvedCapabilities);
         return developerRepository.save(developer);
@@ -82,26 +83,4 @@ public class TeamService {
         }
     }
 
-    private List<String> inferCapabilitiesFromRole(String roleLabel) {
-        if (roleLabel == null || roleLabel.isBlank()) {
-            return List.of();
-        }
-        String normalized = roleLabel.toLowerCase();
-        List<String> capabilities = new java.util.ArrayList<>();
-        if (normalized.contains("backend")) capabilities.add("backend");
-        if (normalized.contains("frontend") || normalized.contains("front end")) capabilities.add("frontend");
-        if (normalized.contains("fullstack") || normalized.contains("full stack")) {
-            capabilities.add("backend");
-            capabilities.add("frontend");
-        }
-        if (normalized.contains("qa") || normalized.contains("test")) capabilities.add("qa");
-        if (normalized.contains("devops") || normalized.contains("sre")) capabilities.add("devops");
-        if (normalized.contains("android")) capabilities.add("android");
-        if (normalized.contains("ios")) capabilities.add("ios");
-        if (normalized.contains("mobile")) {
-            capabilities.add("android");
-            capabilities.add("ios");
-        }
-        return capabilities;
-    }
 }

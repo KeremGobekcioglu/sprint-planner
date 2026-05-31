@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -40,6 +41,25 @@ public class MarkdownFileMemoryAdapter implements MemoryReader, MemoryWriter {
     @Override
     public void writeSprintHistory(UUID teamId, String content) {
         writeMemoryFile(teamId, SPRINT_HISTORY_FILE, content);
+    }
+
+    @Override
+    public Instant getTeamProfileLastUpdated(UUID teamId) {
+        return getFileLastModified(resolveTeamFilePath(teamId, TEAM_PROFILE_FILE));
+    }
+
+    @Override
+    public Instant getSprintHistoryLastUpdated(UUID teamId) {
+        return getFileLastModified(resolveTeamFilePath(teamId, SPRINT_HISTORY_FILE));
+    }
+
+    private Instant getFileLastModified(Path path) {
+        if (!Files.exists(path)) return null;
+        try {
+            return Files.getLastModifiedTime(path).toInstant();
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     private String readMemoryFile(UUID teamId, String fileName) {

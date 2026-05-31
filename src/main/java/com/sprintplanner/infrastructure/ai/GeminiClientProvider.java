@@ -66,14 +66,24 @@ public class GeminiClientProvider {
     }
 
     private boolean isRetryable(Exception e) {
-        String msg = e.getMessage();
-        if (msg == null) return false;
-        return msg.contains("503")
-                || msg.contains("429")
+        if (e == null) return false;
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        if (msg.contains("429")
+                || msg.contains("503")
                 || msg.contains("overloaded")
                 || msg.contains("high demand")
-                || msg.contains("UNAVAILABLE")
-                || msg.contains("quota");
+                || msg.contains("unavailable")
+                || msg.contains("quota")
+                || msg.contains("rate limit")
+                || msg.contains("too many requests")
+                || msg.contains("service unavailable")) {
+            return true;
+        }
+        Throwable cause = e.getCause();
+        if (cause instanceof Exception causeEx && cause != e) {
+            return isRetryable(causeEx);
+        }
+        return false;
     }
 
     private void sleep(long ms) {

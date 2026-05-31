@@ -147,8 +147,8 @@ public class TeamController {
         TeamMemoryResponse response = new TeamMemoryResponse(
             teamProfile.isEmpty() ? null : teamProfile,
             sprintHistory.isEmpty() ? null : sprintHistory,
-            null,
-            null
+            teamProfile.isEmpty() ? null : memoryReader.getTeamProfileLastUpdated(teamId),
+            sprintHistory.isEmpty() ? null : memoryReader.getSprintHistoryLastUpdated(teamId)
         );
 
         return ResponseEntity.ok(response);

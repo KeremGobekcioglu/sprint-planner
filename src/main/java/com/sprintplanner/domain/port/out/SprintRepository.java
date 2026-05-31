@@ -32,4 +32,6 @@ public interface SprintRepository {
     void deleteById(UUID sprintId);
 
     List<Sprint> findStalePlanningSprintsBefore(Instant cutoff);
+
+    long countByTeamId(UUID teamId);
 }

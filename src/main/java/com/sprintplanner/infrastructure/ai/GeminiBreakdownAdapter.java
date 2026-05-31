@@ -69,7 +69,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         if (!isValid(stories)) {
             String retryPrompt = buildRetryPrompt(raw);
 // in breakdown() retry:
-            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_ESTIMATION);
+            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY);
             stories = parseResponse(retryRaw, epics);
         }
 
@@ -209,7 +209,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");
         sb.append("Each element is a user story object with: epicTitle (string), title (string), tasks (array of 2-4 objects).\n");
-        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops).\n");
+        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops|android|ios).\n");
         sb.append("Produce 1-3 user stories per epic.\n\n");
 
         sb.append("## Example Output Shape\n");
@@ -224,6 +224,12 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                 "description": "POST /transfers/validate-iban",
                 "acceptanceCriterion": "Invalid IBANs return 400. Valid IBANs return 200.",
                 "roleTag": "backend"
+              },
+              {
+                "title": "Build Android transfer screen",
+                "description": "Native Android screen for IBAN entry and transfer confirmation.",
+                "acceptanceCriterion": "User can submit a transfer on Android. Error states shown inline.",
+                "roleTag": "android"
               }
             ]
           }
@@ -331,7 +337,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             for (Task task : story.getTasks()) {
                 if (task.getTitle() == null || task.getTitle().isBlank()) return false;
                 if (task.getAcceptanceCriterion() == null || task.getAcceptanceCriterion().isBlank()) return false;
-                if (!List.of("backend", "frontend", "qa", "devops").contains(task.getRoleTag())) return false;
+                if (!List.of("backend", "frontend", "qa", "devops", "android", "ios").contains(task.getRoleTag())) return false;
             }
         }
 

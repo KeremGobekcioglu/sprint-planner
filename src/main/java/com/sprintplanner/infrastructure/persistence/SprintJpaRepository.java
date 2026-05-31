@@ -34,6 +34,8 @@ public interface SprintJpaRepository extends JpaRepository<Sprint, UUID> {
 
     List<Sprint> findByStatusAndPlannedAtBefore(Sprint.Status status, Instant plannedAt);
 
+    long countByTeamId(UUID teamId);
+
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM Sprint")
     void deleteAllBulk();

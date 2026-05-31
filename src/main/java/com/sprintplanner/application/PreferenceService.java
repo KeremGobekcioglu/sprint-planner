@@ -3,6 +3,7 @@ package com.sprintplanner.application;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.port.out.DeveloperRepository;
+import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.MemoryWriter;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import java.time.Instant;
@@ -10,6 +11,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,11 +21,14 @@ import org.springframework.stereotype.Service;
 public class PreferenceService {
 
     private final MemoryWriter memoryWriter;
+    private final MemoryReader memoryReader;
     private final DeveloperRepository developerRepository;
     private final TeamRepository teamRepository;
 
-    public PreferenceService(MemoryWriter memoryWriter, DeveloperRepository developerRepository, TeamRepository teamRepository) {
+    public PreferenceService(MemoryWriter memoryWriter, MemoryReader memoryReader,
+            DeveloperRepository developerRepository, TeamRepository teamRepository) {
         this.memoryWriter = memoryWriter;
+        this.memoryReader = memoryReader;
         this.developerRepository = developerRepository;
         this.teamRepository = teamRepository;
     }
@@ -34,7 +39,6 @@ public class PreferenceService {
     }
 
     private String buildTeamProfileMarkdown(UUID teamId, List<EditLog> editLogs) {
-        // Get team name
         String teamName = teamRepository.findById(teamId)
             .map(com.sprintplanner.domain.model.Team::getName)
             .orElse("Unknown Team");
@@ -46,37 +50,66 @@ public class PreferenceService {
             .append(System.lineSeparator())
             .append(System.lineSeparator());
 
-        if (editLogs.isEmpty()) {
-            builder.append("## Patterns Detected").append(System.lineSeparator())
-                .append("- No edits available yet.").append(System.lineSeparator());
-            return builder.toString();
+        // Load and parse patterns from the previous profile
+        String existingProfile = memoryReader.readTeamProfile(teamId);
+        List<String> previousPatterns = parseExistingPatterns(existingProfile);
+
+        // Detect patterns from current sprint's edit logs
+        List<String> newPatterns = editLogs.isEmpty() ? List.of() : detectPatterns(editLogs);
+
+        // Merge: start with previous patterns, add new ones that aren't already present
+        LinkedHashSet<String> mergedPatterns = new LinkedHashSet<>(previousPatterns);
+        for (String p : newPatterns) {
+            mergedPatterns.add(p);
         }
 
-        // Detect patterns
-        List<String> patterns = detectPatterns(editLogs);
-
-        // Build Patterns section
         builder.append("## Patterns Detected").append(System.lineSeparator());
-        if (patterns.isEmpty()) {
+        if (mergedPatterns.isEmpty()) {
             builder.append("- No clear patterns detected from edits.").append(System.lineSeparator());
         } else {
-            for (String pattern : patterns) {
+            for (String pattern : mergedPatterns) {
                 builder.append("- ").append(pattern).append(System.lineSeparator());
             }
         }
         builder.append(System.lineSeparator());
 
-        // Raw Edit Summary
         builder.append("## Raw Edit Summary").append(System.lineSeparator())
             .append(editLogs.size()).append(" edits logged since last sprint").append(System.lineSeparator());
 
         return builder.toString();
     }
 
+    private List<String> parseExistingPatterns(String existingProfile) {
+        List<String> patterns = new ArrayList<>();
+        if (existingProfile == null || existingProfile.isBlank()) {
+            return patterns;
+        }
+        boolean inPatternsSection = false;
+        for (String line : existingProfile.lines().toList()) {
+            if (line.startsWith("## Patterns Detected")) {
+                inPatternsSection = true;
+                continue;
+            }
+            if (inPatternsSection) {
+                if (line.startsWith("## ")) {
+                    break;
+                }
+                if (line.startsWith("- ") && line.length() > 2) {
+                    String pattern = line.substring(2).trim();
+                    if (!pattern.isEmpty()
+                            && !pattern.equals("No edits available yet.")
+                            && !pattern.equals("No clear patterns detected from edits.")) {
+                        patterns.add(pattern);
+                    }
+                }
+            }
+        }
+        return patterns;
+    }
+
     private List<String> detectPatterns(List<EditLog> editLogs) {
         List<String> patterns = new ArrayList<>();
 
-        // Rule 1: Deferred tasks (3+ times)
         long deferredCount = editLogs.stream()
             .filter(log -> "deferred".equals(log.getField()))
             .count();
@@ -84,7 +117,6 @@ public class PreferenceService {
             patterns.add("PM frequently defers tasks — consider reducing scope per epic");
         }
 
-        // Rule 2: Story Points increase (2+ times)
         long storyPointsIncreaseCount = editLogs.stream()
             .filter(log -> "storyPoints".equals(log.getField()))
             .filter(log -> {
@@ -101,7 +133,6 @@ public class PreferenceService {
             patterns.add("Estimation tends to be low — consider raising default story points for tasks");
         }
 
-        // Rule 3: Assign from unassigned (2+ times)
         long unmappedAssignCount = editLogs.stream()
             .filter(log -> "assignedDevId".equals(log.getField()))
             .filter(log -> "unassigned".equals(log.getOriginalValue()))
@@ -110,21 +141,19 @@ public class PreferenceService {
             patterns.add("PM manually assigns unassigned tasks — distribution agent may need better capability matching");
         }
 
-        // Rule 4: Same developer receives reassignments (frequently)
         Map<UUID, Long> reassignmentCounts = new HashMap<>();
         editLogs.stream()
             .filter(log -> "assignedDevId".equals(log.getField()))
-            .filter(log -> !"unassigned".equals(log.getOriginalValue())) // Reassignment, not initial assignment
+            .filter(log -> !"unassigned".equals(log.getOriginalValue()))
             .forEach(log -> {
                 try {
                     UUID devId = UUID.fromString(log.getNewValue());
                     reassignmentCounts.put(devId, reassignmentCounts.getOrDefault(devId, 0L) + 1);
                 } catch (IllegalArgumentException e) {
-                    // Not a valid UUID, skip
+                    // skip non-UUID values
                 }
             });
 
-        // If any developer receives 2+ reassignments
         for (Map.Entry<UUID, Long> entry : reassignmentCounts.entrySet()) {
             if (entry.getValue() >= 2) {
                 String devName = developerRepository.findById(entry.getKey())

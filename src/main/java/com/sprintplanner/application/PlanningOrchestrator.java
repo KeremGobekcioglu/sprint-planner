@@ -7,6 +7,7 @@ import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
 import com.sprintplanner.domain.port.out.BreakdownPort;
+import com.sprintplanner.domain.service.CapabilityInferenceService;
 import com.sprintplanner.domain.port.out.CapacityPort;
 import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.DistributionPort;
@@ -92,7 +93,14 @@ public class PlanningOrchestrator implements PlanningInputPort {
             }
 
             var developers = developerRepository.findByTeamId(request.teamId());
-            int totalCapacity = developers.stream().mapToInt(Developer::getBaseVelocity).sum();
+            int rawCapacity = developers.stream().mapToInt(Developer::getBaseVelocity).sum();
+            int totalDaysOff = request.daysOff() == null ? 0
+                : request.daysOff().values().stream().mapToInt(Integer::intValue).sum();
+            int devCount = developers.size();
+            int sprintDays = team.getSprintLengthDays();
+            double daysOffFactor = (devCount == 0 || sprintDays == 0) ? 1.0
+                : Math.max(0.5, 1.0 - ((double) totalDaysOff / (devCount * sprintDays)));
+            int totalCapacity = (int) (rawCapacity * 0.80 * daysOffFactor);
 
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
@@ -116,7 +124,8 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 developers,
                 team.getSprintLengthDays(),
                 request.daysOff() == null ? Map.of() : request.daysOff(),
-                effectiveSprintHistory
+                effectiveSprintHistory,
+                request.teamId()
             );
             int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
             push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
@@ -126,7 +135,7 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 .collect(java.util.stream.Collectors.toMap(
                     com.sprintplanner.domain.model.Developer::getId,
                     developer -> developer.getCapabilities().isEmpty()
-                        ? inferCapabilitiesFromRole(developer.getRole())
+                        ? CapabilityInferenceService.inferFromRole(developer.getRole())
                         : developer.getCapabilities(),
                     (a, b) -> a,
                     java.util.LinkedHashMap::new
@@ -157,36 +166,6 @@ public class PlanningOrchestrator implements PlanningInputPort {
 
     private void push(UUID userId, String phase, String message) {
         if (userId != null) progressPort.push(userId, phase, message);
-    }
-
-    private List<String> inferCapabilitiesFromRole(String roleLabel) {
-        if (roleLabel == null || roleLabel.isBlank()) {
-            return List.of();
-        }
-        String normalized = roleLabel.toLowerCase();
-        List<String> capabilities = new java.util.ArrayList<>();
-        if (normalized.contains("backend")) capabilities.add("backend");
-        if (normalized.contains("frontend") || normalized.contains("front end")) capabilities.add("frontend");
-        if (normalized.contains("fullstack") || normalized.contains("full stack")) {
-            capabilities.add("backend");
-            capabilities.add("frontend");
-        }
-        if (normalized.contains("qa") || normalized.contains("test")) capabilities.add("qa");
-        if (normalized.contains("devops") || normalized.contains("sre")) capabilities.add("devops");
-        if (normalized.contains("android")) capabilities.add("android");
-        if (normalized.contains("ios")) capabilities.add("ios");
-        if (normalized.contains("mobile")) {
-            capabilities.add("android");
-            capabilities.add("ios");
-        }
-        return capabilities;
-    }
-
-    private String normalizeCapability(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private void validateRequest(PlanningRequest request) {

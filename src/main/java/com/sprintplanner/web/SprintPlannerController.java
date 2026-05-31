@@ -97,7 +97,7 @@ public class SprintPlannerController {
         Sprint sprint = new Sprint(
             sprintId,
             request.teamId(),
-            1,  // sprintNumber - in real app, would query max sprintNumber
+            (int) sprintRepository.countByTeamId(request.teamId()) + 1,
             request.sprintGoal(),
             request.domain(),
             Sprint.Status.PLANNING,
@@ -282,7 +282,7 @@ public class SprintPlannerController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
 
         teamRepository.findById(sprint.getTeamId())
-            .filter(team -> team.getOwnerId().equals(currentUserId))
+            .filter(team -> currentUserId.equals(team.getOwnerId()))
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied"));
 
         if (sprint.getStatus() == Sprint.Status.ACTIVE || sprint.getStatus() == Sprint.Status.COMPLETED) {

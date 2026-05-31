@@ -14,10 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Service responsible for handling sprint review submission (closing a sprint).
- */
 @Service
 public class SprintReviewService {
 
@@ -47,6 +45,7 @@ public class SprintReviewService {
      * - mark sprint COMPLETED and save
      * - trigger ReferenceBuilder to update sprint_history.md
      */
+    @Transactional
     public void submitReview(SprintReviewRequest request) {
         if (request == null) throw new IllegalArgumentException("request is required");
         if (request.sprintId() == null) throw new IllegalArgumentException("sprintId is required");
