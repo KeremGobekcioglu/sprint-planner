@@ -5,6 +5,7 @@ import { getDashboardData } from '../../api/sprintApi';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
+import { useAuthStore } from '../../store/authStore';
 import type { ActiveSprintSummary, RecentSprintSummary } from '../../types/dashboard';
 import type { TeamSummary } from '../../api/profileApi';
 
@@ -121,6 +122,7 @@ function RecentSprintRow({ sprint }: { sprint: RecentSprintSummary }) {
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const { userId } = useAuthStore();
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard'],
     queryFn: getDashboardData,
@@ -128,10 +130,11 @@ export function DashboardPage() {
   });
 
   useEffect(() => {
-    if (data && data.teams.length === 0 && !localStorage.getItem('onboarding_complete')) {
+    const onboardingKey = `onboarding_complete_${userId}`;
+    if (data && data.teams.length === 0 && !localStorage.getItem(onboardingKey)) {
       navigate('/onboarding', { replace: true });
     }
-  }, [data, navigate]);
+  }, [data, navigate, userId]);
 
   return (
     <PageLayout title="Dashboard" subtitle="Overview of your teams and sprints.">

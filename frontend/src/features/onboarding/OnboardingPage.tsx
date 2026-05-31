@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTeam, createDeveloper } from '../../api/teamApi';
 import { getTrelloStatus } from '../../api/profileApi';
+import { useAuthStore } from '../../store/authStore';
 import type { TeamDomain } from '../../types/team';
 
 const STEPS = [
@@ -424,6 +425,7 @@ function StepReady({ createdTeamId, onFinish }: { createdTeamId: string | null; 
 export function OnboardingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { userId } = useAuthStore();
   const [step, setStep] = useState(0);
   const [createdTeamId, setCreatedTeamId] = useState<string | null>(null);
 
@@ -437,7 +439,7 @@ export function OnboardingPage() {
   const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
 
   function skipOnboarding() {
-    localStorage.setItem('onboarding_complete', 'true');
+    localStorage.setItem(`onboarding_complete_${userId}`, 'true');
     navigate('/dashboard', { replace: true });
   }
 
@@ -450,7 +452,7 @@ export function OnboardingPage() {
   }
 
   function finishOnboarding() {
-    localStorage.setItem('onboarding_complete', 'true');
+    localStorage.setItem(`onboarding_complete_${userId}`, 'true');
     if (createdTeamId) {
       navigate(`/teams/${createdTeamId}/plan`, { replace: true });
     } else {
