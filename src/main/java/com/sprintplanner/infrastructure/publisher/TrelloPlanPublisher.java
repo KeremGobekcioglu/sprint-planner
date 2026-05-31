@@ -70,7 +70,17 @@ public class TrelloPlanPublisher {
                         }
                     }
                     String desc = buildCardDescription(task, devName);
-                    String cardId = trelloApiClient.createCard(listId, task.getTitle(), desc, trelloMemberId, userToken);
+                    String cardId;
+                    try {
+                        cardId = trelloApiClient.createCard(listId, task.getTitle(), desc, trelloMemberId, userToken);
+                    } catch (Exception memberEx) {
+                        if (trelloMemberId != null) {
+                            logger.warn("Card creation with member assignment failed for task '{}', retrying without member: {}", task.getTitle(), memberEx.getMessage());
+                            cardId = trelloApiClient.createCard(listId, task.getTitle(), desc, null, userToken);
+                        } else {
+                            throw memberEx;
+                        }
+                    }
                     task.setTrelloCardId(cardId);
                     taskJpaRepository.save(task);
                     cardCount++;
