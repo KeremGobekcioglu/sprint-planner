@@ -10,9 +10,10 @@ import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
 import {
   createDeveloper, createTeam, getTrelloBoards, getTeams, linkTrelloBoard, loadSampleData,
-  getTrelloMembers, linkTrelloMember,
+  getTrelloMembers, linkTrelloMember, updateDeveloper,
 } from '../../api/teamApi';
 import type { TrelloMember } from '../../api/teamApi';
+import type { CapabilityTag } from '../../types/team';
 import { getTrelloStatus } from '../../api/profileApi';
 import { getActiveSprint } from '../../api/sprintApi';
 import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
@@ -39,6 +40,11 @@ export function TeamSetupPage() {
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [trelloMembers, setTrelloMembers] = useState<TrelloMember[] | null>(null);
   const [memberMappings, setMemberMappings] = useState<Record<string, string>>({});
+  const [editingDevId, setEditingDevId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('');
+  const [editCapabilities, setEditCapabilities] = useState<CapabilityTag[]>([]);
+  const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack'];
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
 
@@ -76,6 +82,15 @@ export function TeamSetupPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['developers', selectedTeamId] });
+    },
+  });
+
+  const updateDeveloperMutation = useMutation({
+    mutationFn: ({ devId, payload }: { devId: string; payload: { name: string; role: string; capabilities: string[] } }) =>
+      updateDeveloper(selectedTeamId!, devId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['developers', selectedTeamId] });
+      setEditingDevId(null);
     },
   });
 
@@ -309,11 +324,14 @@ export function TeamSetupPage() {
                       onChange={(e) => setSelectedBoardId(e.target.value)}
                     >
                       <option value="">— select a board —</option>
-                      {trelloBoardsQuery.data.map((board) => (
-                        <option key={board.id} value={board.id}>
-                          {board.name}
-                        </option>
-                      ))}
+                      {trelloBoardsQuery.data.map((board) => {
+                        const shortId = board.url?.split('/b/')[1]?.split('/')[0] ?? board.id.substring(0, 8);
+                        return (
+                          <option key={board.id} value={board.id}>
+                            {board.name} ({shortId})
+                          </option>
+                        );
+                      })}
                     </select>
                     <button
                       type="button"
@@ -454,27 +472,105 @@ export function TeamSetupPage() {
                 {developersQuery.data?.map((developer) => (
                   <div
                     key={developer.id}
-                    className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-950/45 p-3"
+                    className="rounded-lg border border-white/10 bg-slate-950/45 p-3"
                   >
-                    <div className="flex items-center gap-2">
-                      {developer.trelloMemberId ? (
-                        <span className="text-emerald-400 text-sm" title="Trello member linked">✓</span>
-                      ) : null}
-                      <div>
-                        <p className="font-medium text-slate-100">{developer.name}</p>
-                        <p className="text-xs uppercase tracking-wide text-slate-300">
-                          {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
-                        </p>
+                    {editingDevId === developer.id ? (
+                      <div className="space-y-3">
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <input
+                            className="rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                            placeholder="Name"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                          />
+                          <input
+                            className="rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                            placeholder="Role"
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value)}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {COMMON_CAPABILITIES.map((cap) => (
+                            <label
+                              key={cap}
+                              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs cursor-pointer ${
+                                editCapabilities.includes(cap)
+                                  ? 'border-emerald-300/60 bg-emerald-400/10 text-emerald-100'
+                                  : 'border-white/10 text-slate-300'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="accent-emerald-400"
+                                checked={editCapabilities.includes(cap)}
+                                onChange={(e) =>
+                                  setEditCapabilities((prev) =>
+                                    e.target.checked ? [...prev, cap] : prev.filter((c) => c !== cap),
+                                  )
+                                }
+                              />
+                              {cap}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="rounded-lg bg-emerald-500/85 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
+                            disabled={updateDeveloperMutation.isPending}
+                            onClick={() =>
+                              updateDeveloperMutation.mutate({
+                                devId: developer.id,
+                                payload: { name: editName, role: editRole, capabilities: editCapabilities },
+                              })
+                            }
+                          >
+                            {updateDeveloperMutation.isPending ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs text-slate-300"
+                            onClick={() => setEditingDevId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <button
-                      className="rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200"
-                      onClick={() =>
-                        removeDeveloperMutation.mutate({ teamId: selectedTeam.id, developerId: developer.id })
-                      }
-                    >
-                      Remove
-                    </button>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {developer.trelloMemberId ? (
+                            <span className="text-emerald-400 text-sm" title="Trello member linked">✓</span>
+                          ) : null}
+                          <div>
+                            <p className="font-medium text-slate-100">{developer.name}</p>
+                            <p className="text-xs uppercase tracking-wide text-slate-300">
+                              {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            className="rounded-md border border-slate-500/40 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800/40"
+                            onClick={() => {
+                              setEditingDevId(developer.id);
+                              setEditName(developer.name);
+                              setEditRole(developer.role);
+                              setEditCapabilities((developer.capabilities ?? []) as CapabilityTag[]);
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200"
+                            onClick={() =>
+                              removeDeveloperMutation.mutate({ teamId: selectedTeam.id, developerId: developer.id })
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

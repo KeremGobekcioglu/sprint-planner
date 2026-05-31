@@ -282,6 +282,27 @@ export const getPlanningStatus = (): Promise<PlanningStep[]> => {
   return api.get<PlanningStep[]>('/api/sprints/plan/status').then((r) => r.data ?? []);
 };
 
+export interface SprintReviewSummary {
+  reviewId: string;
+  goalResult: string;
+  blockerNote?: string;
+  totalPlannedPts: number;
+  totalCompletedPts: number;
+  submittedAt: string;
+}
+
+export const getSprintReview = (sprintId: string): Promise<SprintReviewSummary | null> => {
+  if (!USE_REAL_API) return Promise.resolve(null);
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  return api
+    .get<SprintReviewSummary>(`/api/sprints/${canonicalSprintId}/review`)
+    .then((r) => r.data)
+    .catch((err) => {
+      if (err?.response?.status === 404) return null;
+      return null;
+    });
+};
+
 export const deleteSprint = (sprintId: string): Promise<void> => {
   if (!USE_REAL_API) {
     return Promise.resolve();

@@ -16,6 +16,7 @@ import com.sprintplanner.web.dto.AddDeveloperHttpRequest;
 import com.sprintplanner.web.dto.CreateTeamHttpRequest;
 import com.sprintplanner.web.dto.DeveloperHttpDto;
 import com.sprintplanner.web.dto.LinkTrelloMemberRequest;
+import com.sprintplanner.web.dto.UpdateDeveloperRequest;
 import com.sprintplanner.web.dto.TeamHttpDto;
 import com.sprintplanner.web.dto.TeamMemoryResponse;
 import com.sprintplanner.web.dto.SeedSampleTeamsResponse;
@@ -119,6 +120,18 @@ public class TeamController {
             request.baseVelocity()
         );
         return ResponseEntity.ok(DeveloperHttpDto.from(developer));
+    }
+
+    @PutMapping("/{teamId}/developers/{devId}")
+    public ResponseEntity<DeveloperHttpDto> updateDeveloper(
+            @PathVariable UUID teamId,
+            @PathVariable UUID devId,
+            @RequestBody UpdateDeveloperRequest request) {
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        boolean isAdmin = SecurityUtils.isAdmin();
+        Developer updated = teamService.updateDeveloper(teamId, currentUserId, isAdmin, devId,
+                request.name(), request.role(), request.capabilities());
+        return ResponseEntity.ok(DeveloperHttpDto.from(updated));
     }
 
     @DeleteMapping("/{teamId}/developers/{developerId}")

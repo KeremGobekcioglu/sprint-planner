@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode } from '../../api/sprintApi';
+import { getTeam } from '../../api/teamApi';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
@@ -47,6 +48,13 @@ export function PlanningPage() {
     enabled: Boolean(teamId),
   });
 
+  const teamQuery = useQuery({
+    queryKey: ['team', teamId],
+    queryFn: () => getTeam(teamId as string),
+    enabled: Boolean(teamId),
+    staleTime: Infinity,
+  });
+
   const modeData = planningModeQuery.data as any;
   const isFresh = modeData?.mode === 'FRESH';
 
@@ -78,6 +86,12 @@ export function PlanningPage() {
   });
 
   useEffect(() => {
+    if (teamQuery.data?.domain) {
+      form.setValue('domain', teamQuery.data.domain as TeamDomain);
+    }
+  }, [teamQuery.data?.domain, form]);
+
+  useEffect(() => {
     if (!teamId) return;
 
     getMockPlanningDefaults(teamId)
@@ -97,7 +111,10 @@ export function PlanningPage() {
   const developers = developersQuery.data ?? [];
 
   return (
-    <PageLayout title="Planning" subtitle="Feed epics and constraints, then generate a sprint plan draft.">
+    <PageLayout
+      title={teamQuery.data?.name ? `Sprint Planning — ${teamQuery.data.name}` : 'Sprint Planning'}
+      subtitle="Feed epics and constraints, then generate a sprint plan draft."
+    >
       <div className="mb-4">
         <button
           type="button"

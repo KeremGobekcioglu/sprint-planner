@@ -1,8 +1,13 @@
 package com.sprintplanner.infrastructure.external;
 
 import com.sprintplanner.infrastructure.config.TrelloConfig;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
@@ -85,23 +90,30 @@ public class TrelloApiClient {
         }
     }
 
-    @SuppressWarnings("rawtypes")
     public String createCard(String listId, String name, String description, String trelloMemberId, String token) {
         validateApiKey();
         String resolvedToken = resolveToken(token);
-        String url = config.getBaseUrl() + "/cards?"
-                + auth(resolvedToken) + "&idList=" + listId
-                + "&name=" + encode(name)
-                + "&desc=" + encode(description);
+        String url = config.getBaseUrl() + "/cards?key=" + config.getApiKey() + "&token=" + resolvedToken;
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("name", name != null ? name : "");
+        body.put("desc", description != null ? description : "");
+        body.put("idList", listId);
         if (trelloMemberId != null && !trelloMemberId.isBlank()) {
-            url += "&idMembers=" + encode(trelloMemberId);
+            body.put("idMembers", List.of(trelloMemberId));
         }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, headers);
+
         try {
-            Map response = restTemplate.postForObject(url, null, Map.class);
-            if (response == null || response.get("id") == null) {
+            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
+            Map<?, ?> responseBody = response.getBody();
+            if (responseBody == null || responseBody.get("id") == null) {
                 throw new RuntimeException("Trello returned empty response for card creation");
             }
-            return (String) response.get("id");
+            return (String) responseBody.get("id");
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

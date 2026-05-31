@@ -2,6 +2,8 @@ package com.sprintplanner.infrastructure.config;
 
 import com.sprintplanner.application.TeamService;
 import com.sprintplanner.domain.model.AppUser;
+import com.sprintplanner.domain.port.out.DeveloperRepository;
+import com.sprintplanner.domain.service.CapabilityInferenceService;
 import com.sprintplanner.infrastructure.persistence.JpaUserRepository;
 import java.time.Instant;
 import java.util.List;
@@ -40,20 +42,24 @@ public class DevDataSeeder implements CommandLineRunner {
     private final JpaUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TeamService teamService;
+    private final DeveloperRepository developerRepository;
 
     public DevDataSeeder(
         JpaUserRepository userRepository,
         PasswordEncoder passwordEncoder,
-        TeamService teamService
+        TeamService teamService,
+        DeveloperRepository developerRepository
     ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.teamService = teamService;
+        this.developerRepository = developerRepository;
     }
 
     @Override
     public void run(String... args) {
         if (userRepository.findByEmail(SEED_EMAIL).isPresent()) {
+            backfillMissingCapabilities();
             return;
         }
 
@@ -88,5 +94,19 @@ public class DevDataSeeder implements CommandLineRunner {
         teamService.addDeveloper(pulse.getId(), seedUserId, true, "Kofi Mensah", "iOS Engineer", List.of("ios"), 6);
         teamService.addDeveloper(pulse.getId(), seedUserId, true, "Sarah Jenkins", "QA Engineer", List.of("qa"), 5);
         teamService.addDeveloper(pulse.getId(), seedUserId, true, "Alex Volkov", "Backend Engineer", List.of("backend"), 8);
+    }
+
+    private void backfillMissingCapabilities() {
+        teamService.getTeams(null, true).forEach(team ->
+            developerRepository.findByTeamId(team.getId()).forEach(dev -> {
+                if (dev.getCapabilities().isEmpty()) {
+                    List<String> inferred = CapabilityInferenceService.inferFromRole(dev.getRole());
+                    if (!inferred.isEmpty()) {
+                        dev.setCapabilities(inferred);
+                        developerRepository.save(dev);
+                    }
+                }
+            })
+        );
     }
 }

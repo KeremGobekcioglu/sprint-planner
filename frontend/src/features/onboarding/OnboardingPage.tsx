@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createTeam, createDeveloper } from '../../api/teamApi';
 import { getTrelloStatus } from '../../api/profileApi';
 import { useAuthStore } from '../../store/authStore';
+import { DeveloperForm } from '../team-setup/DeveloperForm';
 import type { TeamDomain } from '../../types/team';
 
 const STEPS = [
@@ -23,6 +24,7 @@ interface TeamFormValues {
 interface PendingDev {
   name: string;
   role: string;
+  capabilities: string[];
   baseVelocity: number;
 }
 
@@ -119,23 +121,12 @@ function StepTeam({
 }) {
   const queryClient = useQueryClient();
   const [pendingDevs, setPendingDevs] = useState<PendingDev[]>([]);
-  const [devName, setDevName] = useState('');
-  const [devRole, setDevRole] = useState('Backend Engineer');
-  const [devVelocity, setDevVelocity] = useState(5);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<TeamFormValues>({
     defaultValues: { name: '', domain: 'GENERIC', sprintLengthDays: 14 },
   });
-
-  function addDev() {
-    if (!devName.trim()) return;
-    setPendingDevs((prev) => [...prev, { name: devName.trim(), role: devRole, baseVelocity: devVelocity }]);
-    setDevName('');
-    setDevRole('Backend Engineer');
-    setDevVelocity(5);
-  }
 
   function removeDev(index: number) {
     setPendingDevs((prev) => prev.filter((_, i) => i !== index));
@@ -151,12 +142,13 @@ function StepTeam({
           createDeveloper(team.id, {
             name: dev.name,
             role: dev.role,
-            capabilities: [],
+            capabilities: dev.capabilities,
             baseVelocity: dev.baseVelocity,
           }),
         ),
       );
       queryClient.invalidateQueries({ queryKey: ['teams'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       onTeamCreated(team.id);
       onNext();
     } catch {
@@ -204,45 +196,25 @@ function StepTeam({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 space-y-4">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 space-y-3">
           <h3 className="font-semibold text-slate-200">Add developers</h3>
-          <div className="grid gap-2 sm:grid-cols-4">
-            <input
-              className="rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 sm:col-span-1"
-              placeholder="Name"
-              value={devName}
-              onChange={(e) => setDevName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addDev(); } }}
-            />
-            <input
-              className="rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 sm:col-span-1"
-              placeholder="Role"
-              value={devRole}
-              onChange={(e) => setDevRole(e.target.value)}
-            />
-            <input
-              type="number"
-              min={1}
-              className="rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 sm:col-span-1"
-              value={devVelocity}
-              onChange={(e) => setDevVelocity(Number(e.target.value))}
-              title="Base velocity (story points per sprint)"
-            />
-            <button
-              type="button"
-              onClick={addDev}
-              className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-600 sm:col-span-1"
-            >
-              + Add
-            </button>
-          </div>
-
+          <DeveloperForm
+            isSubmitting={false}
+            onSubmit={(values) => {
+              setPendingDevs((prev) => [...prev, {
+                name: values.name,
+                role: values.role,
+                capabilities: values.capabilities,
+                baseVelocity: values.baseVelocity,
+              }]);
+            }}
+          />
           {pendingDevs.length > 0 ? (
             <ul className="space-y-2">
               {pendingDevs.map((dev, i) => (
                 <li key={i} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm">
                   <span className="text-slate-200">{dev.name}</span>
-                  <span className="text-slate-400">{dev.role} · {dev.baseVelocity} pts</span>
+                  <span className="text-slate-400">{dev.role} · {dev.capabilities.join(', ')} · {dev.baseVelocity} pts</span>
                   <button type="button" onClick={() => removeDev(i)} className="text-slate-500 hover:text-rose-400 ml-3">✕</button>
                 </li>
               ))}

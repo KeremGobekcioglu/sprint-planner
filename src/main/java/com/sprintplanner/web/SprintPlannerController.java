@@ -22,6 +22,7 @@ import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
+import com.sprintplanner.web.dto.SprintReviewSummary;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -271,6 +272,27 @@ public class SprintPlannerController {
             sprintRepository.deleteById(sprint.getId());
         }
         return ResponseEntity.ok("Deleted " + staleSprints.size() + " sprints");
+    }
+
+    @GetMapping("/{sprintId}/review")
+    public ResponseEntity<SprintReviewSummary> getSprintReview(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+
+        com.sprintplanner.domain.model.SprintReview review = sprint.getSprintReview();
+        if (review == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(new SprintReviewSummary(
+            review.getId(),
+            review.getGoalResult() != null ? review.getGoalResult().name() : null,
+            review.getBlockerNote(),
+            review.getTotalPlannedPts(),
+            review.getTotalCompletedPts(),
+            review.getSubmittedAt()
+        ));
     }
 
     @DeleteMapping("/{sprintId}")

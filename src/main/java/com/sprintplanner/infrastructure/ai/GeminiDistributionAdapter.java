@@ -55,6 +55,12 @@ public class GeminiDistributionAdapter implements DistributionPort {
         } else {
             logger.info("[DISTRIBUTION] No sprint history memory");
         }
+
+        logger.info("[DISTRIBUTION] Developer capabilities: {}",
+            developerCapabilities == null ? "null" :
+            developerCapabilities.entrySet().stream()
+                .map(e -> e.getKey().toString().substring(0, Math.min(8, e.getKey().toString().length())) + "=" + e.getValue())
+                .collect(java.util.stream.Collectors.joining(", ")));
         if (estimatedUserStories == null || estimatedUserStories.isEmpty()) {
             return new SprintPlan(teamId, sprintGoal, List.of(), List.of(), null);
         }
@@ -344,6 +350,10 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 roleToDevelopers.computeIfAbsent(normalized, key -> new ArrayList<>()).add(entry.getKey());
             }
         }
+        logger.info("[DISTRIBUTION] Role map built: {}",
+            roleToDevelopers.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue().size() + " devs")
+                .collect(java.util.stream.Collectors.joining(", ")));
         return roleToDevelopers;
     }
 

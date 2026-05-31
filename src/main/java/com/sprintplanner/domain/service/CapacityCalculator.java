@@ -43,7 +43,7 @@ public class CapacityCalculator {
             double availabilityRatio = (double) availableDays / sprintLengthDays;
             double completionFactor = resolveCompletionFactor(developer.getId(), completionRateByDeveloper);
             double rawCapacity = developer.getBaseVelocity() * availabilityRatio * completionFactor;
-            int roundedCapacity = Math.max(0, (int) Math.round(rawCapacity));
+            int roundedCapacity = Math.max(1, (int) Math.ceil(rawCapacity));
             result.put(developer.getId(), roundedCapacity);
         }
 

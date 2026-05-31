@@ -17,7 +17,8 @@ interface CloseFormValues {
 export function SprintClosePage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
-  const { planQuery, submitMutation } = useSprintClose(sprintId);
+  const { planQuery, reviewQuery, submitMutation } = useSprintClose(sprintId);
+  const existingReview = reviewQuery.data ?? null;
   const effectiveSprintId = planQuery.data?.sprintId ?? sprintId;
 
   const form = useForm<CloseFormValues>({
@@ -69,13 +70,36 @@ export function SprintClosePage() {
       <div className="mb-4">
         <button
           type="button"
-          onClick={() => navigate(`/sprints/${sprintId}/review`)}
+          onClick={() => {
+            if (planQuery.data?.sprintStatus === 'COMPLETED') {
+              navigate('/dashboard', { replace: true });
+            } else {
+              navigate(`/sprints/${sprintId}/review`);
+            }
+          }}
           className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
         >
-          ← Back to Review
+          {planQuery.data?.sprintStatus === 'COMPLETED' ? '← Back to Dashboard' : '← Back to Review'}
         </button>
       </div>
-      <section className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
+      {existingReview && (
+        <section className="space-y-3 rounded-3xl border border-emerald-500/20 bg-emerald-950/20 p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 text-lg">✓</span>
+            <p className="font-semibold text-emerald-200">This sprint has already been reviewed.</p>
+          </div>
+          <div className="grid gap-2 text-sm text-slate-300">
+            <p><span className="text-slate-400">Goal result:</span> {existingReview.goalResult}</p>
+            <p><span className="text-slate-400">Planned:</span> {existingReview.totalPlannedPts} pts</p>
+            <p><span className="text-slate-400">Completed:</span> {existingReview.totalCompletedPts} pts</p>
+            {existingReview.blockerNote && (
+              <p><span className="text-slate-400">Blockers:</span> {existingReview.blockerNote}</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section className={`space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card${existingReview ? ' opacity-50 pointer-events-none' : ''}`}>
         {planQuery.isLoading ? <LoadingSpinner label="Loading sprint tasks..." /> : null}
         {planQuery.isError ? <ErrorBanner message="Could not load sprint tasks for closeout." /> : null}
         {submitMutation.isError ? (
@@ -164,7 +188,7 @@ export function SprintClosePage() {
 
           <button
             className="rounded-lg bg-ink px-4 py-2 font-semibold text-white"
-            disabled={submitMutation.isPending || !planQuery.data?.teamId}
+            disabled={submitMutation.isPending || !planQuery.data?.teamId || Boolean(existingReview)}
           >
             {submitMutation.isPending ? 'Submitting...' : 'Submit Review'}
           </button>

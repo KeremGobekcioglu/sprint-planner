@@ -13,10 +13,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ReferenceBuilder {
+
+    private static final Logger logger = LoggerFactory.getLogger(ReferenceBuilder.class);
 
     private final MemoryWriter memoryWriter;
     private final DeveloperRepository developerRepository;
@@ -30,6 +34,7 @@ public class ReferenceBuilder {
     }
 
     public void updateSprintHistory(UUID teamId, List<SprintReview> reviews) {
+        logger.info("[MEMORY] Writing sprint history via {}", memoryWriter.getClass().getSimpleName());
         String markdown = buildSprintHistoryMarkdown(reviews);
         memoryWriter.writeSprintHistory(teamId, markdown);
     }

@@ -21,6 +21,7 @@ export function ReviewPage() {
   const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
   const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
+  const [storyPointOverrides, setStoryPointOverrides] = useState<Record<string, number>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [trelloNoticeDismissed, setTrelloNoticeDismissed] = useState(
@@ -50,26 +51,29 @@ export function ReviewPage() {
     return map;
   }, [developersQuery.data]);
 
-  const allTasks = useMemo(() => [...stories.flatMap((story) => story.tasks), ...unassignedTasks], [stories, unassignedTasks]);
+  const allTasks = useMemo(() =>
+    [...stories.flatMap((story) => story.tasks), ...unassignedTasks].map((t) =>
+      storyPointOverrides[t.id] !== undefined ? { ...t, storyPoints: storyPointOverrides[t.id]! } : t,
+    ),
+  [stories, unassignedTasks, storyPointOverrides]);
 
   const lanes = useMemo(() => {
     const laneMap = new Map<string, Task[]>();
+    // Seed a lane for every known developer so lanes never disappear when emptied
+    (developersQuery.data ?? []).forEach((dev) => laneMap.set(dev.id, []));
+    laneMap.set('unassigned', []);
     for (const task of allTasks) {
       const effectiveOwner = overrides[task.id] ?? task.assignedDevId ?? 'unassigned';
       const laneTasks = laneMap.get(effectiveOwner) ?? [];
       laneTasks.push({ ...task, assignedDevId: effectiveOwner });
       laneMap.set(effectiveOwner, laneTasks);
     }
-    // Always keep the unassigned lane when plan data is loaded so tasks can be dragged back
-    if (allTasks.length > 0 && !laneMap.has('unassigned')) {
-      laneMap.set('unassigned', []);
-    }
     return Array.from(laneMap.entries()).sort(([a], [b]) => {
       if (a === 'unassigned') return 1;
       if (b === 'unassigned') return -1;
       return 0;
     });
-  }, [allTasks, overrides]);
+  }, [allTasks, overrides, developersQuery.data]);
 
   const epicGroups = useMemo(() => {
     const groups: Record<string, typeof stories> = {};
@@ -158,7 +162,7 @@ export function ReviewPage() {
                       pushTrelloMutation.mutate(effectiveSprintId, {
                         onSuccess: () => {
                           reset();
-                          navigate(`/sprints/${effectiveSprintId}/close`);
+                          navigate(`/sprints/${effectiveSprintId}/close`, { replace: true });
                         },
                       });
                     },
@@ -336,6 +340,9 @@ export function ReviewPage() {
               }}
               onEdit={(taskId, field, oldValue, newValue) => {
                 if (!effectiveSprintId) return;
+                if (field === 'storyPoints') {
+                  setStoryPointOverrides((prev) => ({ ...prev, [taskId]: newValue as number }));
+                }
                 const edit = {
                   field,
                   entityId: taskId,

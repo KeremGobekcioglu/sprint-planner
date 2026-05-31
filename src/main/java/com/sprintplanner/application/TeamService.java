@@ -62,6 +62,23 @@ public class TeamService {
         return developerRepository.findByTeamId(teamId);
     }
 
+    public Developer updateDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, UUID developerId,
+            String name, String role, List<String> capabilities) {
+        getTeam(teamId, currentUserId, isAdmin);
+        Developer developer = developerRepository.findById(developerId)
+            .orElseThrow(() -> new IllegalArgumentException("Developer not found: " + developerId));
+        if (!developer.getTeamId().equals(teamId)) {
+            throw new IllegalArgumentException("Developer does not belong to this team");
+        }
+        developer.setName(name);
+        developer.setRole(role);
+        List<String> resolvedCapabilities = (capabilities == null || capabilities.isEmpty())
+            ? CapabilityInferenceService.inferFromRole(role)
+            : capabilities;
+        developer.setCapabilities(resolvedCapabilities);
+        return developerRepository.save(developer);
+    }
+
     @Transactional
     public void removeDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, UUID developerId) {
         getTeam(teamId, currentUserId, isAdmin);
