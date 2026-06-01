@@ -38,6 +38,7 @@ export function useTeamSetup(selectedTeamId: string | null) {
         }
         return [...existing, team];
       });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error) => {
       console.error('Create team failed', error);

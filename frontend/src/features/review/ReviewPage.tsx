@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteSprint } from '../../api/sprintApi';
 import { getTrelloStatus } from '../../api/profileApi';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
@@ -19,6 +19,7 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
+  const queryClient = useQueryClient();
   const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [storyPointOverrides, setStoryPointOverrides] = useState<Record<string, number>>({});
@@ -32,6 +33,7 @@ export function ReviewPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSprint(id),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       navigate('/dashboard');
     },
   });
@@ -202,6 +204,24 @@ export function ReviewPage() {
         {!planQuery.isLoading && !planQuery.data ? (
           <ErrorBanner message="Sprint data is not available. Generate a plan again before opening review." />
         ) : null}
+
+        {planQuery.data?.sprintStatus === 'PLANNING' && (!isTrelloConnected || !hasTrelloBoard) && (
+          <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-900/20 px-4 py-3 text-sm">
+            <span className="text-amber-200">
+              ⚠ <strong>Approve &amp; Push to Trello</strong> is disabled —{' '}
+              {!isTrelloConnected
+                ? 'connect your Trello account on the Profile page to enable approval.'
+                : 'link a Trello board to this team in Team Setup to enable approval.'}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate(!isTrelloConnected ? '/profile' : '/teams')}
+              className="ml-4 shrink-0 rounded-lg bg-amber-500/85 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600/85"
+            >
+              {!isTrelloConnected ? 'Connect Trello →' : 'Set up Trello →'}
+            </button>
+          </div>
+        )}
 
         <div className="grid gap-3">
           {warnings.map((warning) => (

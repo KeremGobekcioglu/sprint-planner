@@ -33,7 +33,7 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
     defaultValues: {
       name: '',
       role: 'Backend Engineer',
-      capabilitiesText: 'backend',
+      capabilitiesText: '',
       baseVelocity: 5,
     },
   });
@@ -43,7 +43,7 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
 
   return (
     <form
-      className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/50 p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+      className="grid gap-4 rounded-2xl border border-white/10 bg-slate-900/50 p-4"
       onSubmit={handleSubmit((values) => {
         const customCapabilities = values.capabilitiesText.split(',');
         const merged = normalizeCapabilities([...selectedCapabilities, ...customCapabilities]);
@@ -57,39 +57,28 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
         setSelectedCapabilities(['backend']);
       })}
     >
+      {/* Name */}
       <input
         className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
         placeholder="Developer name"
         {...register('name', { required: true })}
       />
-      <input
-        className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
-        placeholder="Role label (e.g. Senior Backend)"
-        {...register('role', { required: true })}
-      />
-      <input
-        className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
-        type="number"
-        min={1}
-        {...register('baseVelocity', { valueAsNumber: true, min: 1 })}
-      />
-      <button className="rounded-lg bg-emerald-500/85 px-4 py-2 text-sm font-semibold text-slate-950" disabled={isSubmitting}>
-        {isSubmitting ? 'Adding...' : 'Add developer'}
-      </button>
 
-      <div className="sm:col-span-2 lg:col-span-4">
+      {/* Capabilities — above job title, used by AI */}
+      <div>
         <div className="flex items-center gap-1.5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Capabilities</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">What can they work on?</p>
           <HelpTooltip
             text="Used for task routing. The AI only assigns backend tasks to developers with backend capability."
             position="right"
           />
         </div>
+        <p className="mt-0.5 text-xs text-slate-400">The AI uses these to route tasks. Select all that apply.</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {capabilityOptions.map((capability) => (
             <label
               key={capability}
-              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-wide ${
+              className={`flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs uppercase tracking-wide ${
                 selectedCapabilities.includes(capability)
                   ? 'border-emerald-300/60 bg-emerald-400/10 text-emerald-100'
                   : 'border-white/10 text-slate-300'
@@ -112,13 +101,46 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
             </label>
           ))}
         </div>
-        <input
-          className="mt-3 w-full rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
-          placeholder="Custom capabilities (comma-separated)"
-          {...register('capabilitiesText')}
-        />
-        <p className="mt-1 text-xs text-slate-400">Used for task routing, e.g. backend, android, fullstack.</p>
+        {/* capabilitiesText kept for submission logic — input not rendered */}
+        <input type="hidden" {...register('capabilitiesText')} />
       </div>
+
+      {/* Job title + Velocity — side by side */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Job title</p>
+          <input
+            className="w-full rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
+            placeholder="e.g. Senior Backend Engineer"
+            {...register('role', { required: true })}
+          />
+          <p className="mt-1 text-xs text-slate-400">Displayed on their card. Can be anything.</p>
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Sprint velocity (story points)</p>
+            <HelpTooltip
+              text="Story points this developer can complete in one sprint. Used to limit how much work they're assigned. Typical range: 3–13."
+              position="left"
+            />
+          </div>
+          <input
+            className="w-full rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
+            type="number"
+            min={1}
+            {...register('baseVelocity', { valueAsNumber: true, min: 1 })}
+          />
+          <p className="mt-1 text-xs text-slate-400">How many story points this developer completes per sprint.</p>
+        </div>
+      </div>
+
+      {/* Submit */}
+      <button
+        className="rounded-lg bg-emerald-500/85 px-4 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+        disabled={isSubmitting}
+      >
+        {isSubmitting ? 'Adding...' : 'Add developer'}
+      </button>
     </form>
   );
 }

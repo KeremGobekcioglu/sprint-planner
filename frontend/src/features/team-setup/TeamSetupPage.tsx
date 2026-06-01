@@ -483,14 +483,20 @@ export function TeamSetupPage() {
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
                           />
-                          <input
-                            className="rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100"
-                            placeholder="Role"
-                            value={editRole}
-                            onChange={(e) => setEditRole(e.target.value)}
-                          />
+                          <div>
+                            <input
+                              className="w-full rounded-lg border border-slate-500/40 bg-slate-900 px-3 py-2 text-sm text-slate-100"
+                              placeholder="Job title (e.g. Senior Backend Engineer)"
+                              value={editRole}
+                              onChange={(e) => setEditRole(e.target.value)}
+                            />
+                            <p className="mt-1 text-xs text-slate-400">Displayed on their card. Can be anything.</p>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
+                        <div>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">What can they work on?</p>
+                          <p className="mb-2 text-xs text-slate-400">The AI uses these to route tasks. Select all that apply.</p>
+                          <div className="flex flex-wrap gap-2">
                           {COMMON_CAPABILITIES.map((cap) => (
                             <label
                               key={cap}
@@ -513,6 +519,7 @@ export function TeamSetupPage() {
                               {cap}
                             </label>
                           ))}
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           <button
