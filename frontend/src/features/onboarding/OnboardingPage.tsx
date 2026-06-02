@@ -196,34 +196,6 @@ function StepTeam({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 space-y-3">
-          <h3 className="font-semibold text-slate-200">Add developers</h3>
-          <DeveloperForm
-            isSubmitting={false}
-            onSubmit={(values) => {
-              setPendingDevs((prev) => [...prev, {
-                name: values.name,
-                role: values.role,
-                capabilities: values.capabilities,
-                baseVelocity: values.baseVelocity,
-              }]);
-            }}
-          />
-          {pendingDevs.length > 0 ? (
-            <ul className="space-y-2">
-              {pendingDevs.map((dev, i) => (
-                <li key={i} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm">
-                  <span className="text-slate-200">{dev.name}</span>
-                  <span className="text-slate-400">{dev.role} · {dev.capabilities.join(', ')} · {dev.baseVelocity} pts</span>
-                  <button type="button" onClick={() => removeDev(i)} className="text-slate-500 hover:text-rose-400 ml-3">✕</button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-slate-500">No developers added yet. You can add them now or later from the Teams page.</p>
-          )}
-        </div>
-
         {error && <p className="text-sm text-rose-400">{error}</p>}
 
         <div className="flex items-center justify-between pt-2">
@@ -243,6 +215,34 @@ function StepTeam({
           </button>
         </div>
       </form>
+
+      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 space-y-3">
+        <h3 className="font-semibold text-slate-200">Add developers</h3>
+        <DeveloperForm
+          isSubmitting={false}
+          onSubmit={(values) => {
+            setPendingDevs((prev) => [...prev, {
+              name: values.name,
+              role: values.role,
+              capabilities: values.capabilities,
+              baseVelocity: values.baseVelocity,
+            }]);
+          }}
+        />
+        {pendingDevs.length > 0 ? (
+          <ul className="space-y-2">
+            {pendingDevs.map((dev, i) => (
+              <li key={i} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm">
+                <span className="text-slate-200">{dev.name}</span>
+                <span className="text-slate-400">{dev.role} · {dev.capabilities.join(', ')} · {dev.baseVelocity} pts</span>
+                <button type="button" onClick={() => removeDev(i)} className="text-slate-500 hover:text-rose-400 ml-3">✕</button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-slate-500">No developers added yet. You can add them now or later from the Teams page.</p>
+        )}
+      </div>
     </div>
   );
 }
