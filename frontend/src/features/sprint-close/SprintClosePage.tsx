@@ -187,7 +187,7 @@ export function SprintClosePage() {
           </div>
 
           <button
-            className="rounded-lg bg-ink px-4 py-2 font-semibold text-white"
+            className="w-full rounded-lg bg-ink px-4 py-2 font-semibold text-white sm:w-auto"
             disabled={submitMutation.isPending || !planQuery.data?.teamId || Boolean(existingReview)}
           >
             {submitMutation.isPending ? 'Submitting...' : 'Submit Review'}

@@ -259,7 +259,7 @@ const payload: PlanningRequest = {
 
               <button
                 type="button"
-                className="rounded-lg bg-blue-500/85 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
+                className="min-h-[44px] rounded-lg bg-blue-500/85 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
                 onClick={async () => {
                   if (!teamId) return;
                   setIsLoadingSamples(true);
@@ -342,7 +342,7 @@ const payload: PlanningRequest = {
           </div>
 
           <button
-            className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
+            className="w-full rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60 sm:w-auto"
             disabled={planMutation.isPending || planGenerated}
           >
             {planGenerated ? 'Sprint Generated ✓' : planMutation.isPending ? 'Generating...' : 'Generate Plan'}
@@ -360,9 +360,9 @@ const payload: PlanningRequest = {
         ) : null}
 
         {planningSteps.length > 0 ? (
-          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-sm">
+          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-xs sm:text-sm">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pipeline Log</p>
-            <ul className="space-y-1.5">
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto">
               {pipelineEntries.map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className={

@@ -7,7 +7,7 @@ interface TaskCompletionToggleProps {
 
 export function TaskCompletionToggle({ taskId, title, checked, onChange }: TaskCompletionToggleProps) {
   return (
-    <label className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-950/60 p-3">
+    <label className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-white/10 bg-slate-950/60 p-3">
       <span className="text-sm text-slate-100">{title}</span>
       <input
         type="checkbox"

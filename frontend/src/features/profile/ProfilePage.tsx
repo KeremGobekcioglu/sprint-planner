@@ -43,7 +43,7 @@ function MemoryPanel({ team }: { team: TeamSummary }) {
           {isError ? <ErrorBanner message="Could not load memory files." /> : null}
 
           {data ? (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -195,7 +195,7 @@ export function ProfilePage() {
                 {editingName ? (
                   <>
                     <input
-                      className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm text-slate-100"
+                      className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm text-slate-100"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') saveName(); }}
@@ -303,36 +303,55 @@ export function ProfilePage() {
           ) : null}
 
           {profileQuery.data && profileQuery.data.teams.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-slate-200">
-                <thead>
-                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-400">
-                    <th className="pb-2 pr-4">Team</th>
-                    <th className="pb-2 pr-4">Domain</th>
-                    <th className="pb-2 pr-4">Developers</th>
-                    <th className="pb-2 pr-4">Sprints Completed</th>
-                    <th className="pb-2">Last Sprint</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profileQuery.data.teams.map((team) => (
-                    <tr
-                      key={team.teamId}
-                      className="cursor-pointer border-b border-white/5 hover:bg-slate-800/30"
-                      onClick={() => navigate(`/teams/${team.teamId}/plan`)}
-                    >
-                      <td className="py-2 pr-4 font-medium text-sky-300">{team.name}</td>
-                      <td className="py-2 pr-4 text-slate-400">{team.domain}</td>
-                      <td className="py-2 pr-4">{team.developerCount}</td>
-                      <td className="py-2 pr-4">{team.completedSprints}</td>
-                      <td className="py-2 text-slate-400">
-                        {team.lastSprintAt ? new Date(team.lastSprintAt).toLocaleDateString() : '—'}
-                      </td>
+            <>
+              {/* Mobile: card list */}
+              <div className="space-y-3 sm:hidden">
+                {profileQuery.data.teams.map((team) => (
+                  <button
+                    key={team.teamId}
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/40 p-3 text-left hover:bg-slate-900/50"
+                    onClick={() => navigate(`/teams/${team.teamId}/plan`)}
+                  >
+                    <p className="font-medium text-sky-300">{team.name}</p>
+                    <p className="text-xs text-slate-400">{team.domain} · {team.developerCount} devs · {team.completedSprints} sprints</p>
+                    {team.lastSprintAt ? (
+                      <p className="text-xs text-slate-500">Last: {new Date(team.lastSprintAt).toLocaleDateString()}</p>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm text-slate-200">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-400">
+                      <th className="pb-2 pr-4">Team</th>
+                      <th className="pb-2 pr-4">Domain</th>
+                      <th className="pb-2 pr-4">Developers</th>
+                      <th className="pb-2 pr-4">Sprints Completed</th>
+                      <th className="pb-2">Last Sprint</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {profileQuery.data.teams.map((team) => (
+                      <tr
+                        key={team.teamId}
+                        className="cursor-pointer border-b border-white/5 hover:bg-slate-800/30"
+                        onClick={() => navigate(`/teams/${team.teamId}/plan`)}
+                      >
+                        <td className="py-2 pr-4 font-medium text-sky-300">{team.name}</td>
+                        <td className="py-2 pr-4 text-slate-400">{team.domain}</td>
+                        <td className="py-2 pr-4">{team.developerCount}</td>
+                        <td className="py-2 pr-4">{team.completedSprints}</td>
+                        <td className="py-2 text-slate-400">
+                          {team.lastSprintAt ? new Date(team.lastSprintAt).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : null}
         </section>
 
@@ -352,7 +371,7 @@ export function ProfilePage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
                   <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsPlanned}</p>
                   <p className="mt-1 text-xs text-slate-400">Sprints planned</p>

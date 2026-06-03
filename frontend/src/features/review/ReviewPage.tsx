@@ -111,11 +111,11 @@ export function ReviewPage() {
       title="Review"
       subtitle="Inspect, edit and rebalance the plan before pushing anything to Trello."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {planQuery.data?.sprintStatus === 'PLANNING' && (
             <div className="flex items-center gap-1.5">
               <button
-                className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-[44px] w-full rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={deleteMutation.isPending}
                 onClick={() => setDeleteDialogOpen(true)}
               >
@@ -138,6 +138,7 @@ export function ReviewPage() {
                 position="bottom"
               />
               <span
+                className="w-full sm:w-auto"
                 title={
                   !isTrelloConnected
                     ? 'Connect Trello on your profile first'
@@ -147,7 +148,7 @@ export function ReviewPage() {
                 }
               >
               <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-[44px] w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={
                   !planQuery.data ||
                   !hasReviewedAllWarnings ||
@@ -327,7 +328,8 @@ export function ReviewPage() {
           </div>
         )}
 
-        <div className="grid gap-4 pb-32 md:grid-cols-2 xl:grid-cols-3">
+        <p className="hidden text-xs text-slate-500 sm:block">Drag tasks between lanes to reassign developers.</p>
+        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
               key={developerId}
