@@ -6,6 +6,21 @@ export interface Epic {
   description: string;
 }
 
+export interface CarryoverTask {
+  taskId: string;
+  sprintId: string;
+  sprintGoal: string;
+  epicTitle: string;
+  storyTitle: string;
+  taskTitle: string;
+  description: string;
+  acceptanceCriterion: string;
+  roleTag: string;
+  storyPoints: number;
+  previousAssignedDevId: string | null;
+  previousAssignedDevName: string | null;
+}
+
 export interface PlanningRequest {
   teamId: string;
   epics: Epic[];
@@ -13,6 +28,18 @@ export interface PlanningRequest {
   sprintGoal: string;
   daysOff: Record<string, number>;
   previousSprintContext?: string;
+  carryoverTasks?: CarryoverTask[];
+}
+
+export interface SprintConfidenceForecast {
+  commitmentPoints: number;
+  realisticCompletionPoints: number;
+  recommendedDeferPoints: number;
+  completionProbability: number;
+  historicalCompletionRate: number;
+  sprintsAnalyzed: number;
+  forecastSummary: string;
+  insights: string[];
 }
 
 export interface MismatchWarning {
@@ -27,6 +54,7 @@ export interface SprintPlan {
   userStories: UserStory[];
   unassignedTasks: UserStory['tasks'];
   sprintStatus?: string;
+  confidence?: SprintConfidenceForecast;
 }
 
 /**

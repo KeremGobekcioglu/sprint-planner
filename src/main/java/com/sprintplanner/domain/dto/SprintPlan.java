@@ -12,5 +12,6 @@ public record SprintPlan(
     String sprintGoal,
     List<UserStoryDto> userStories,
     List<TaskDto> unassignedTasks,
-    String sprintStatus
+    String sprintStatus,
+    SprintConfidenceForecast confidence
 ) {}
