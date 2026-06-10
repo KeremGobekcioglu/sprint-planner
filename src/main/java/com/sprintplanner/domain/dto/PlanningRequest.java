@@ -14,5 +14,6 @@ public record PlanningRequest(
     String domain,           // E_COMMERCE | FINTECH | GENERIC
     String sprintGoal,
     Map<UUID, Integer> daysOff,  // developerId -> days off this sprint
-    String previousSprintContext // optional one-time import; never persisted to memory files
+    String previousSprintContext, // optional one-time import; never persisted to memory files
+    List<CarryoverTaskDto> carryoverTasks // nullable — tasks from the previous sprint to carry over
 ) {}
