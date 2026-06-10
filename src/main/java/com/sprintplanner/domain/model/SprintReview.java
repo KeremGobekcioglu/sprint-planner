@@ -54,6 +54,9 @@ public class SprintReview {
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
 
+    @Column(name = "retrospective_report", columnDefinition = "TEXT")
+    private String retrospectiveReport;
+
     @OneToMany(mappedBy = "review", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<DevCompletion> devCompletions = new ArrayList<>();
 
@@ -80,6 +83,7 @@ public class SprintReview {
     public int getTotalPlannedPts() { return totalPlannedPts; }
     public int getTotalCompletedPts() { return totalCompletedPts; }
     public Instant getSubmittedAt() { return submittedAt; }
+    public String getRetrospectiveReport() { return retrospectiveReport; }
     public List<DevCompletion> getDevCompletions() { return devCompletions; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
@@ -92,5 +96,6 @@ public class SprintReview {
     public void setTotalPlannedPts(int totalPlannedPts) { this.totalPlannedPts = totalPlannedPts; }
     public void setTotalCompletedPts(int totalCompletedPts) { this.totalCompletedPts = totalCompletedPts; }
     public void setSubmittedAt(Instant submittedAt) { this.submittedAt = submittedAt; }
+    public void setRetrospectiveReport(String retrospectiveReport) { this.retrospectiveReport = retrospectiveReport; }
     public void setDevCompletions(List<DevCompletion> devCompletions) { this.devCompletions = devCompletions; }
 }

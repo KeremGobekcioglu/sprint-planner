@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
@@ -20,6 +20,7 @@ export function SprintClosePage() {
   const { planQuery, reviewQuery, submitMutation } = useSprintClose(sprintId);
   const existingReview = reviewQuery.data ?? null;
   const effectiveSprintId = planQuery.data?.sprintId ?? sprintId;
+  const [submitted, setSubmitted] = useState(false);
 
   const form = useForm<CloseFormValues>({
     defaultValues: {
@@ -82,6 +83,31 @@ export function SprintClosePage() {
           {planQuery.data?.sprintStatus === 'COMPLETED' ? '← Back to Dashboard' : '← Back to Review'}
         </button>
       </div>
+      {submitted && (
+        <section className="space-y-3 rounded-3xl border border-emerald-500/20 bg-emerald-950/20 p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 text-lg">✓</span>
+            <p className="font-semibold text-emerald-200">Sprint review submitted successfully.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(`/sprints/${effectiveSprintId}/retrospective`)}
+              className="rounded-lg bg-blue-500/85 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600/85"
+            >
+              View Retrospective →
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard', { replace: true })}
+              className="rounded-lg border border-slate-500/40 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </section>
+      )}
+
       {existingReview && (
         <section className="space-y-3 rounded-3xl border border-emerald-500/20 bg-emerald-950/20 p-5 shadow-card">
           <div className="flex items-center gap-2">
@@ -96,6 +122,13 @@ export function SprintClosePage() {
               <p><span className="text-slate-400">Blockers:</span> {existingReview.blockerNote}</p>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/sprints/${effectiveSprintId}/retrospective`)}
+            className="rounded-lg bg-blue-500/85 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600/85"
+          >
+            View Retrospective →
+          </button>
         </section>
       )}
 
@@ -130,7 +163,7 @@ export function SprintClosePage() {
               },
               {
                 onSuccess: () => {
-                  navigate('/dashboard', { replace: true });
+                  setSubmitted(true);
                 },
               },
             );

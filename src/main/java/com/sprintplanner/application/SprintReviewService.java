@@ -1,5 +1,7 @@
 package com.sprintplanner.application;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sprintplanner.domain.dto.RetrospectiveReport;
 import com.sprintplanner.domain.model.DevCompletion;
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.SprintReview;
@@ -13,27 +15,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SprintReviewService {
 
+    private static final Logger logger = LoggerFactory.getLogger(SprintReviewService.class);
+
     private final SprintRepository sprintRepository;
     private final SprintReviewJpaRepository sprintReviewJpaRepository;
     private final DevCompletionJpaRepository devCompletionJpaRepository;
     private final ReferenceBuilder referenceBuilder;
+    private final RetrospectiveService retrospectiveService;
+    private final ObjectMapper objectMapper;
 
     public SprintReviewService(
         SprintRepository sprintRepository,
         SprintReviewJpaRepository sprintReviewJpaRepository,
         DevCompletionJpaRepository devCompletionJpaRepository,
-        ReferenceBuilder referenceBuilder
+        ReferenceBuilder referenceBuilder,
+        RetrospectiveService retrospectiveService,
+        ObjectMapper objectMapper
     ) {
         this.sprintRepository = sprintRepository;
         this.sprintReviewJpaRepository = sprintReviewJpaRepository;
         this.devCompletionJpaRepository = devCompletionJpaRepository;
         this.referenceBuilder = referenceBuilder;
+        this.retrospectiveService = retrospectiveService;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -131,18 +143,55 @@ public class SprintReviewService {
 
         if (!devCompletions.isEmpty()) {
             devCompletionJpaRepository.saveAll(devCompletions);
+            // Populate the in-memory review so ReferenceBuilder can render the dev table
+            // without needing a second DB round-trip.
+            review.getDevCompletions().addAll(devCompletions);
         }
 
         // Mark sprint completed
         sprint.setStatus(Sprint.Status.COMPLETED);
         sprintRepository.save(sprint);
 
-        // Update sprint history memory for this team
+        // Best-effort: generate and cache the retrospective report now so the first
+        // GET /retrospective call is instant. This may fail within the same transaction
+        // (Hibernate first-level cache hides the freshly saved review from the sprint
+        // association) — the endpoint falls back to on-demand generation in that case.
+        try {
+            RetrospectiveReport report = retrospectiveService.generateReport(sprintId);
+            String reportJson = objectMapper.writeValueAsString(report);
+            review.setRetrospectiveReport(reportJson);
+            sprintReviewJpaRepository.save(review);
+            logger.info("[RETROSPECTIVE] Generated and cached for sprint {}", sprintId);
+        } catch (Exception e) {
+            logger.warn("[RETROSPECTIVE] Failed to cache at close time, will generate on demand: {}", e.getMessage());
+        }
+
+        // Update sprint history memory for this team.
+        // findByTeamIdWithReviews uses LEFT JOIN FETCH, but the sprint entity is already
+        // in the Hibernate first-level cache from the top of this method — at that point
+        // no review existed, so sprint.sprintReview was resolved as null and cached.
+        // Hibernate returns that stale cached instance, so the current sprint's review
+        // is invisible via the association. We add it explicitly to guarantee it appears.
         UUID teamId = sprint.getTeamId();
-        List<SprintReview> teamReviews = sprintRepository.findByTeamIdWithReviews(teamId).stream()
+        List<SprintReview> fromDb = sprintRepository.findByTeamIdWithReviews(teamId).stream()
             .map(Sprint::getSprintReview)
             .filter(r -> r != null)
             .toList();
-        referenceBuilder.updateSprintHistory(teamId, teamReviews);
+
+        List<SprintReview> allReviews = new ArrayList<>(fromDb);
+        if (fromDb.stream().noneMatch(r -> r.getId().equals(review.getId()))) {
+            allReviews.add(review);
+        }
+        referenceBuilder.updateSprintHistory(teamId, allReviews);
+    }
+
+    @Transactional
+    public void cacheRetrospectiveReport(UUID sprintId, String reportJson) {
+        sprintReviewJpaRepository.findBySprintId(sprintId).ifPresent(review -> {
+            if (review.getRetrospectiveReport() == null || review.getRetrospectiveReport().isBlank()) {
+                review.setRetrospectiveReport(reportJson);
+                sprintReviewJpaRepository.save(review);
+            }
+        });
     }
 }
