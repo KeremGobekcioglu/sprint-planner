@@ -24,11 +24,15 @@ export function LoginPage() {
     mutationFn: () => login(email, password),
     onSuccess: (data) => {
       loginStore(data.token, data.userId, data.email, data.name, data.role);
+      localStorage.removeItem(`onboarding_pending_${data.userId}`);
       navigate('/dashboard', { replace: true });
     },
     onError: (err: unknown) => {
       if (isAxiosError(err)) {
-        setError((err.response?.data as { message?: string } | undefined)?.message ?? 'Login failed. Please try again.');
+        setError(
+            (err.response?.data as { message?: string } | undefined)?.message ??
+            'Login failed. Please try again.',
+        );
         return;
       }
       setError('Login failed. Please try again.');
@@ -41,63 +45,83 @@ export function LoginPage() {
   };
 
   return (
-    <AuthLayout
-      title="Welcome Back"
-      subtitle="Sign in to continue sprint planning"
-      footer={
-        <>
-          No account?{' '}
-          <button onClick={() => navigate('/signup')} className="text-sky-300 underline hover:text-sky-200">
-            Sign up
-          </button>
-        </>
-      }
-    >
-      {error && <ErrorBanner message={error} />}
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-200">Email</label>
-        <input
-          type="email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && email && password) {
-              handleSubmit();
-            }
-          }}
-          disabled={loginMutation.isPending}
-          className="w-full rounded-lg border border-slate-600/70 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400 disabled:opacity-60"
-        />
-      </div>
-
-      <div>
-        <label className="mb-1 block text-sm font-medium text-slate-200">Password</label>
-        <input
-          type="password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && email && password) {
-              handleSubmit();
-            }
-          }}
-          disabled={loginMutation.isPending}
-          className="w-full rounded-lg border border-slate-600/70 px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400 disabled:opacity-60"
-        />
-      </div>
-
-      <button
-        onClick={handleSubmit}
-        disabled={loginMutation.isPending || !email || !password}
-        className="w-full rounded-lg bg-sky-500 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 hover:bg-sky-400"
+      <AuthLayout
+          variant="login"
+          title="Welcome back"
+          subtitle="Sign in to continue sprint planning"
+          footer={
+            <>
+              No account yet?{' '}
+              <button
+                  onClick={() => navigate('/signup')}
+                  className="text-indigo-400 transition-colors hover:text-indigo-300"
+              >
+                Create your workspace →
+              </button>
+            </>
+          }
       >
-        {loginMutation.isPending ? 'Logging in...' : 'Log In'}
-      </button>
+        {error && <ErrorBanner message={error} />}
 
-    </AuthLayout>
+        {/* Email */}
+        <div>
+          <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-widest text-slate-500">
+            Email
+          </label>
+          <input
+              type="email"
+              placeholder="you@yourteam.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && email && password) handleSubmit();
+              }}
+              disabled={loginMutation.isPending}
+              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+          />
+        </div>
+
+        {/* Password */}
+        <div>
+          <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-widest text-slate-500">
+            Password
+          </label>
+          <input
+              type="password"
+              placeholder="••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && email && password) handleSubmit();
+              }}
+              disabled={loginMutation.isPending}
+              className="w-full rounded-lg border border-slate-800 bg-slate-900 px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+          />
+        </div>
+
+        {/* Submit */}
+        <button
+            onClick={handleSubmit}
+            disabled={loginMutation.isPending || !email || !password}
+            className="mt-1 flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-500 py-2.5 text-sm font-medium text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {loginMutation.isPending ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Signing in…
+              </>
+          ) : (
+              <>
+                Sign in to workspace
+                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </>
+          )}
+        </button>
+      </AuthLayout>
   );
 }
-

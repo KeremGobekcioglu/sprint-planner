@@ -157,8 +157,16 @@ export function DashboardPage() {
   });
 
   useEffect(() => {
-    const onboardingKey = `onboarding_complete_${userId}`;
-    if (data && data.teams.length === 0 && !localStorage.getItem(onboardingKey)) {
+    if (!userId || !data) {
+      return;
+    }
+
+    const onboardingPendingKey = `onboarding_pending_${userId}`;
+    const onboardingCompleteKey = `onboarding_complete_${userId}`;
+    const hasPendingOnboarding = localStorage.getItem(onboardingPendingKey) === 'true';
+    const hasCompletedOnboarding = localStorage.getItem(onboardingCompleteKey) === 'true';
+
+    if (data.teams.length === 0 && hasPendingOnboarding && !hasCompletedOnboarding) {
       navigate('/onboarding', { replace: true });
     }
   }, [data, navigate, userId]);
