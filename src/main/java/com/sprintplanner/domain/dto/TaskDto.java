@@ -15,6 +15,6 @@ public record TaskDto(
     String roleTag,
     int storyPoints,
     String status,
-    String trelloCardId
+    String trelloCardId,
+    String assignmentReason
 ) {}
-

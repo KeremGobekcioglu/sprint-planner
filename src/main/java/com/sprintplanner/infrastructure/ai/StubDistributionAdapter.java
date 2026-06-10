@@ -23,6 +23,7 @@ public class StubDistributionAdapter implements DistributionPort {
         List<UserStory> estimatedUserStories,
         Map<UUID, Integer> capacityByDeveloper,
         Map<UUID, List<String>> developerCapabilities,
+        Map<UUID, String> developerNames,
         String teamProfileMemory,
         String sprintHistoryMemory
     ) {
@@ -64,6 +65,7 @@ public class StubDistributionAdapter implements DistributionPort {
                 .map(SprintPlanMapper::toDto)
                 .toList(),
             List.of(),
+            null,
             null
         );
     }

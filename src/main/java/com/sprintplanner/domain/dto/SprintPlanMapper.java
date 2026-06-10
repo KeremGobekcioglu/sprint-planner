@@ -33,7 +33,8 @@ public class SprintPlanMapper {
             task.getRoleTag(),
             task.getStoryPoints(),
             task.getStatus(),
-            task.getTrelloCardId()
+            task.getTrelloCardId(),
+            task.getAssignmentReason()
         );
     }
 
@@ -79,7 +80,8 @@ public class SprintPlanMapper {
             sprint.getGoal(),
             storyDtos,
             List.of(),
-            sprint.getStatus().name()
+            sprint.getStatus().name(),
+            null
         );
     }
 
@@ -91,7 +93,7 @@ public class SprintPlanMapper {
         if (dto == null) {
             return null;
         }
-        return new Task(
+        Task task = new Task(
             dto.id(),
             dto.storyId(),
             dto.assignedDevId(),
@@ -103,6 +105,8 @@ public class SprintPlanMapper {
             dto.status(),
             dto.trelloCardId()
         );
+        task.setAssignmentReason(dto.assignmentReason());
+        return task;
     }
 
     /**
