@@ -1,31 +1,47 @@
 package com.sprintplanner.web;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sprintplanner.application.ConfidenceCalculator;
 import com.sprintplanner.application.PreferenceService;
+import com.sprintplanner.application.RetrospectiveService;
+import com.sprintplanner.application.SprintReviewService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.sprintplanner.domain.dto.RetrospectiveReport;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
+import com.sprintplanner.domain.dto.SprintConfidenceForecast;
 import com.sprintplanner.domain.dto.SprintPlan;
 import com.sprintplanner.domain.dto.SprintPlanMapper;
+import com.sprintplanner.domain.dto.TaskDto;
 import com.sprintplanner.domain.dto.UserStoryDto;
 import com.sprintplanner.domain.model.AppUser;
+import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.EditLog;
 import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
+import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.EditLogRepository;
 import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
+import com.sprintplanner.infrastructure.ai.GeminiClientProvider;
 import com.sprintplanner.infrastructure.persistence.JpaUserRepository;
+import com.sprintplanner.infrastructure.persistence.TaskJpaRepository;
 import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import com.sprintplanner.web.dto.SprintReviewSummary;
+import com.sprintplanner.web.dto.TaskGuidanceResponse;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,12 +57,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/sprints")
 public class SprintPlannerController {
 
+    private static final Logger logger = LoggerFactory.getLogger(SprintPlannerController.class);
     private static final Pattern UUID_PATTERN = Pattern.compile(
         "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}"
     );
@@ -56,29 +74,47 @@ public class SprintPlannerController {
     private final MemoryReader memoryReader;
     private final EditLogRepository editLogRepository;
     private final TeamRepository teamRepository;
+    private final DeveloperRepository developerRepository;
     private final PreferenceService preferenceService;
     private final PlanningProgressStore progressStore;
     private final TrelloPlanPublisher trelloPlanPublisher;
     private final JpaUserRepository userRepository;
+    private final TaskJpaRepository taskJpaRepository;
+    private final GeminiClientProvider geminiClientProvider;
+    private final ObjectMapper objectMapper;
+    private final ConfidenceCalculator confidenceCalculator;
+    private final RetrospectiveService retrospectiveService;
+    private final SprintReviewService sprintReviewService;
 
     public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository,
             MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository,
-            PreferenceService preferenceService, PlanningProgressStore progressStore,
-            TrelloPlanPublisher trelloPlanPublisher, JpaUserRepository userRepository) {
+            DeveloperRepository developerRepository, PreferenceService preferenceService,
+            PlanningProgressStore progressStore, TrelloPlanPublisher trelloPlanPublisher,
+            JpaUserRepository userRepository, TaskJpaRepository taskJpaRepository,
+            GeminiClientProvider geminiClientProvider, ObjectMapper objectMapper,
+            ConfidenceCalculator confidenceCalculator, RetrospectiveService retrospectiveService,
+            SprintReviewService sprintReviewService) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
         this.memoryReader = memoryReader;
         this.editLogRepository = editLogRepository;
         this.teamRepository = teamRepository;
+        this.developerRepository = developerRepository;
         this.preferenceService = preferenceService;
         this.progressStore = progressStore;
         this.trelloPlanPublisher = trelloPlanPublisher;
         this.userRepository = userRepository;
+        this.taskJpaRepository = taskJpaRepository;
+        this.geminiClientProvider = geminiClientProvider;
+        this.objectMapper = objectMapper;
+        this.confidenceCalculator = confidenceCalculator;
+        this.retrospectiveService = retrospectiveService;
+        this.sprintReviewService = sprintReviewService;
     }
 
     @PostMapping("/plan")
     public ResponseEntity<SprintPlan> planSprint(@RequestBody PlanSprintHttpRequest request) {
-        UUID currentUserId = SecurityUtils .getCurrentUserId();
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
         PlanningRequest planningRequest = new PlanningRequest(
             request.teamId(),
             currentUserId,
@@ -88,7 +124,8 @@ public class SprintPlannerController {
             request.domain(),
             request.sprintGoal(),
             request.daysOff() == null ? Map.of() : request.daysOff(),
-            request.previousSprintContext()
+            request.previousSprintContext(),
+            request.carryoverTasks()
         );
         
         SprintPlan plan = planningInputPort.planSprint(planningRequest);
@@ -123,8 +160,38 @@ public class SprintPlannerController {
             }
         }
 
+        // Without this, tasks the distribution adapter marks unassigned are dropped from the DB entirely.
+        if (plan.unassignedTasks() != null && !plan.unassignedTasks().isEmpty()) {
+            Map<UUID, UserStory> storyById = new HashMap<>();
+            for (UserStory story : userStories) {
+                storyById.put(story.getId(), story);
+            }
+            for (TaskDto unassignedDto : plan.unassignedTasks()) {
+                if (unassignedDto.storyId() == null) continue;
+                UserStory parentStory = storyById.get(unassignedDto.storyId());
+                if (parentStory == null) continue;
+                Task task = SprintPlanMapper.fromDto(unassignedDto);
+                task.setStory(parentStory);
+                parentStory.getTasks().add(task);
+            }
+        }
+
         sprint.setUserStories(userStories);
         sprintRepository.save(sprint);
+
+        // Compute confidence forecast from total committed points
+        int totalPoints = 0;
+        if (plan.userStories() != null) {
+            for (UserStoryDto s : plan.userStories()) {
+                totalPoints += s.storyPoints();
+            }
+        }
+        if (plan.unassignedTasks() != null) {
+            for (TaskDto t : plan.unassignedTasks()) {
+                totalPoints += t.storyPoints();
+            }
+        }
+        SprintConfidenceForecast forecast = confidenceCalculator.calculate(request.teamId(), totalPoints);
 
         SprintPlan planWithId = new SprintPlan(
                 plan.teamId(),
@@ -141,7 +208,8 @@ public class SprintPlannerController {
                         ))
                         .toList(),
                 plan.unassignedTasks() == null ? List.of() : plan.unassignedTasks(),
-                "PLANNING"
+                "PLANNING",
+                forecast
         );
 
         return ResponseEntity.ok(planWithId);
@@ -170,6 +238,14 @@ public class SprintPlannerController {
         UUID userId = SecurityUtils.getCurrentUserId();
         List<PlanningProgressStore.Step> steps = progressStore.get(userId);
         return ResponseEntity.ok(steps);
+    }
+
+    @GetMapping("/teams/{teamId}/confidence")
+    public ResponseEntity<SprintConfidenceForecast> getConfidenceForecast(
+            @PathVariable UUID teamId,
+            @RequestParam int points) {
+        SprintConfidenceForecast forecast = confidenceCalculator.calculate(teamId, points);
+        return ResponseEntity.ok(forecast);
     }
 
     @GetMapping("/teams/{teamId}/planning-mode")
@@ -295,6 +371,39 @@ public class SprintPlannerController {
         ));
     }
 
+    @GetMapping("/{sprintId}/retrospective")
+    public ResponseEntity<RetrospectiveReport> getRetrospective(@PathVariable String sprintId) {
+        UUID normalizedId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findById(normalizedId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found"));
+
+        com.sprintplanner.domain.model.SprintReview review = sprint.getSprintReview();
+        if (review == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+
+        // Serve from cache if available
+        if (review.getRetrospectiveReport() != null && !review.getRetrospectiveReport().isBlank()) {
+            try {
+                RetrospectiveReport cached = objectMapper.readValue(
+                    review.getRetrospectiveReport(), RetrospectiveReport.class);
+                return ResponseEntity.ok(cached);
+            } catch (Exception e) {
+                logger.warn("[RETROSPECTIVE] Cache deserialization failed for sprint {}, regenerating: {}", normalizedId, e.getMessage());
+            }
+        }
+
+        // On-demand generation — then cache the result so subsequent calls are instant
+        RetrospectiveReport report = retrospectiveService.generateReport(normalizedId);
+        try {
+            String json = objectMapper.writeValueAsString(report);
+            sprintReviewService.cacheRetrospectiveReport(normalizedId, json);
+        } catch (Exception e) {
+            logger.warn("[RETROSPECTIVE] Failed to cache after on-demand generation for sprint {}: {}", normalizedId, e.getMessage());
+        }
+        return ResponseEntity.ok(report);
+    }
+
     @DeleteMapping("/{sprintId}")
     public ResponseEntity<Void> deleteSprint(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
@@ -313,6 +422,84 @@ public class SprintPlannerController {
 
         sprintRepository.deleteById(normalizedSprintId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{sprintId}/tasks/{taskId}/guidance")
+    public ResponseEntity<TaskGuidanceResponse> getTaskGuidance(
+            @PathVariable String sprintId,
+            @PathVariable UUID taskId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+
+        Task task = taskJpaRepository.findById(taskId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found: " + taskId));
+
+        Sprint sprint = sprintRepository.findById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+
+        String teamProfileMemory = memoryReader.readTeamProfile(sprint.getTeamId());
+        String sprintHistoryMemory = memoryReader.readSprintHistory(sprint.getTeamId());
+
+        String devName = "Unassigned";
+        if (task.getAssignedDevId() != null) {
+            devName = developerRepository.findById(task.getAssignedDevId())
+                .map(Developer::getName).orElse("Unknown");
+        }
+
+        String prompt = buildGuidancePrompt(task, devName, teamProfileMemory, sprintHistoryMemory);
+        String raw = geminiClientProvider.generate(prompt, 0.3f, GeminiClientProvider.MODEL_ESTIMATION);
+
+        try {
+            String cleaned = raw.trim()
+                .replaceAll("(?s)```json\\s*", "")
+                .replaceAll("(?s)```\\s*", "")
+                .trim();
+            JsonNode node = objectMapper.readTree(cleaned);
+            String hints = node.path("hints").asText("");
+            String suggestedApproach = node.path("suggestedApproach").asText("");
+            List<String> riskFlags = new ArrayList<>();
+            for (JsonNode flag : node.path("riskFlags")) {
+                riskFlags.add(flag.asText());
+            }
+            return ResponseEntity.ok(new TaskGuidanceResponse(hints, suggestedApproach, riskFlags));
+        } catch (Exception e) {
+            return ResponseEntity.ok(new TaskGuidanceResponse(raw, "", List.of()));
+        }
+    }
+
+    private String buildGuidancePrompt(Task task, String devName, String teamProfile, String sprintHistory) {
+        return """
+            You are a senior software engineer giving implementation advice.
+
+            Task: %s
+            Description: %s
+            Acceptance Criteria: %s
+            Role: %s
+            Story Points: %d
+            Assigned to: %s
+
+            Team Preferences:
+            %s
+
+            Sprint History:
+            %s
+
+            Provide:
+            1. 2-3 concrete implementation hints specific to this task
+            2. Risk flags: patterns from history suggesting this task type is often underestimated or problematic
+            3. A suggested approach in 2-4 numbered steps
+
+            Respond ONLY with JSON:
+            {
+              "hints": "string — 2-3 sentences of implementation advice",
+              "suggestedApproach": "string — numbered steps as plain text",
+              "riskFlags": ["string", "string"]
+            }
+            """.formatted(
+                task.getTitle(), task.getDescription(), task.getAcceptanceCriterion(),
+                task.getRoleTag(), task.getStoryPoints(), devName,
+                teamProfile != null ? teamProfile : "No preferences yet",
+                sprintHistory != null ? sprintHistory : "No history yet"
+            );
     }
 
     private UUID normalizeSprintId(String rawSprintId) {

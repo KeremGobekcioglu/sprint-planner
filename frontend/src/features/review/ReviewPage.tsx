@@ -8,8 +8,10 @@ import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useReviewStore } from '../../store/reviewStore';
+import { usePlanningStore } from '../../store/planningStore';
 import type { MismatchWarning as MismatchWarningType } from '../../types/planning';
 import type { Task } from '../../types/sprint';
+import { ConfidenceForecast } from '../planning/ConfidenceForecast';
 import { DeveloperLane } from './DeveloperLane';
 import { MismatchWarning } from './MismatchWarning';
 import { useReview } from './useReview';
@@ -19,12 +21,14 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
+  const { confidence } = usePlanningStore();
   const queryClient = useQueryClient();
   const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [storyPointOverrides, setStoryPointOverrides] = useState<Record<string, number>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [openGuidanceTaskId, setOpenGuidanceTaskId] = useState<string | null>(null);
   const [trelloNoticeDismissed, setTrelloNoticeDismissed] = useState(
     () => localStorage.getItem('trello_notice_dismissed') === 'true',
   );
@@ -206,6 +210,8 @@ export function ReviewPage() {
           <ErrorBanner message="Sprint data is not available. Generate a plan again before opening review." />
         ) : null}
 
+        {confidence && <ConfidenceForecast forecast={confidence} />}
+
         {planQuery.data?.sprintStatus === 'PLANNING' && (!isTrelloConnected || !hasTrelloBoard) && (
           <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-900/20 px-4 py-3 text-sm">
             <span className="text-amber-200">
@@ -342,6 +348,9 @@ export function ReviewPage() {
                 (developersQuery.data ?? []).find((d) => d.id === developerId)?.baseVelocity ??
                 20
               }
+              sprintId={effectiveSprintId ?? ''}
+              openGuidanceTaskId={openGuidanceTaskId}
+              onGuidanceToggle={setOpenGuidanceTaskId}
               onDropTask={(taskId, targetDeveloperId) => {
                 const sourceTask = allTasks.find((task) => task.id === taskId);
                 if (!sourceTask || !effectiveSprintId) return;

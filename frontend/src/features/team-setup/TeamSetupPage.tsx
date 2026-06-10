@@ -20,6 +20,7 @@ import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
 import { HelpTooltip } from '../../components/shared/HelpTooltip';
+import { TeamMemoryPanel } from '../profile/TeamMemoryPanel';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
@@ -44,6 +45,7 @@ export function TeamSetupPage() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editCapabilities, setEditCapabilities] = useState<CapabilityTag[]>([]);
+  const [memoryTeamId, setMemoryTeamId] = useState<string | null>(null);
   const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack'];
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
@@ -98,6 +100,14 @@ export function TeamSetupPage() {
     setTrelloMembers(null);
     setMemberMappings({});
   }, [selectedTeamId]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMemoryTeamId(null);
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
 
   const activeSprintQuery = useQuery({
     queryKey: ['active-sprint'],
@@ -224,20 +234,29 @@ export function TeamSetupPage() {
 
           <div className="grid gap-3">
             {teamsQuery.data?.map((team) => (
-              <button
-                key={team.id}
-                className={`rounded-xl border p-4 text-left transition ${
-                  selectedTeamId === team.id
-                    ? 'border-emerald-300/60 bg-emerald-400/12'
-                    : 'border-white/10 bg-slate-950/45 hover:border-slate-300/30 hover:bg-slate-900/55'
-                }`}
-                onClick={() => setSelectedTeamId(team.id)}
-              >
-                <p className="font-semibold text-slate-100">{team.name}</p>
-                <p className="text-xs text-slate-300">
-                  {team.domain} • {team.sprintLengthDays} days
-                </p>
-              </button>
+              <div key={team.id} className="flex items-stretch gap-2">
+                <button
+                  className={`flex-1 rounded-xl border p-4 text-left transition ${
+                    selectedTeamId === team.id
+                      ? 'border-emerald-300/60 bg-emerald-400/12'
+                      : 'border-white/10 bg-slate-950/45 hover:border-slate-300/30 hover:bg-slate-900/55'
+                  }`}
+                  onClick={() => setSelectedTeamId(team.id)}
+                >
+                  <p className="font-semibold text-slate-100">{team.name}</p>
+                  <p className="text-xs text-slate-300">
+                    {team.domain} • {team.sprintLengthDays} days
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  title="View AI memory for this team"
+                  onClick={() => setMemoryTeamId(team.id)}
+                  className="rounded-xl border border-white/10 bg-slate-950/45 px-3 text-base hover:bg-slate-800/40 hover:border-teal-500/30 transition"
+                >
+                  🧠
+                </button>
+              </div>
             ))}
           </div>
         </article>
@@ -588,6 +607,30 @@ export function TeamSetupPage() {
           ) : null}
         </article>
       </section>
+
+      {/* Memory modal */}
+      {memoryTeamId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setMemoryTeamId(null); }}
+        >
+          <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-100">
+                AI Memory — {teamsQuery.data?.find((t) => t.id === memoryTeamId)?.name}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMemoryTeamId(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <TeamMemoryPanel teamId={memoryTeamId} />
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }

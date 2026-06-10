@@ -1,7 +1,7 @@
 import api from './axios';
 import { getDevelopers, getTeams } from './teamApi';
 import { getSampleEpicsForTeam, getSampleSprintGoal, SAMPLE_EPICS_PAYFLOW, SAMPLE_EPICS_SHOPHUB } from './sampleData';
-import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
+import type { CarryoverTask, PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
 import type { DashboardResponse } from '../types/dashboard';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
@@ -309,6 +309,41 @@ export const deleteSprint = (sprintId: string): Promise<void> => {
   }
   const canonicalSprintId = normalizeSprintId(sprintId);
   return api.delete(`/api/sprints/${canonicalSprintId}`).then(() => undefined);
+};
+
+export const getCarryoverTasks = async (teamId: string): Promise<CarryoverTask[]> => {
+  if (!USE_REAL_API) return [];
+  const response = await api.get(`/api/teams/${teamId}/carryover`);
+  return response.data;
+};
+
+export const getTaskGuidance = async (sprintId: string, taskId: string) => {
+  const response = await api.post(`/api/sprints/${normalizeSprintId(sprintId)}/tasks/${taskId}/guidance`);
+  return response.data as { hints: string; suggestedApproach: string; riskFlags: string[] };
+};
+
+export interface RetrospectiveReport {
+  sprintId: string;
+  sprintGoal: string;
+  goalResult: 'YES' | 'PARTIALLY' | 'NO';
+  plannedPoints: number;
+  completedPoints: number;
+  completionRate: number;
+  developerStats: {
+    developerName: string;
+    plannedPts: number;
+    completedPts: number;
+    completionRate: number;
+    trend: string;
+  }[];
+  patterns: string[];
+  recommendations: string[];
+  aiAnalysis: string;
+}
+
+export const getRetrospectiveReport = async (sprintId: string): Promise<RetrospectiveReport> => {
+  const response = await api.get(`/api/sprints/${normalizeSprintId(sprintId)}/retrospective`);
+  return response.data as RetrospectiveReport;
 };
 
 export async function getSampleEpicsForPlanning(

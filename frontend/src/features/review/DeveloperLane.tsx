@@ -13,9 +13,12 @@ interface DeveloperLaneProps {
   onDefer: (taskId: string) => void;
   isDeferred: (taskId: string) => boolean;
   stories?: UserStory[];
+  sprintId: string;
+  openGuidanceTaskId: string | null;
+  onGuidanceToggle: (taskId: string | null) => void;
 }
 
-export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, isDeferred, stories }: DeveloperLaneProps) {
+export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, isDeferred, stories, sprintId, openGuidanceTaskId, onGuidanceToggle }: DeveloperLaneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const points = tasks.reduce((sum, task) => sum + task.storyPoints, 0);
@@ -42,7 +45,16 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
         </div>
         <div className="space-y-2">
           {storyTasks.map((task) => (
-            <TaskCard key={task.id} task={task} onEdit={onEdit} onDefer={onDefer} isDeferred={isDeferred(task.id)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              onEdit={onEdit}
+              onDefer={onDefer}
+              isDeferred={isDeferred(task.id)}
+              sprintId={sprintId}
+              isGuidanceOpen={openGuidanceTaskId === task.id}
+              onGuidanceToggle={onGuidanceToggle}
+            />
           ))}
         </div>
       </div>
