@@ -1,8 +1,10 @@
 package com.sprintplanner.application;
 
+import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
 import com.sprintplanner.domain.model.Developer;
+import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.Team;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.in.PlanningInputPort;
@@ -16,6 +18,7 @@ import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.ProgressPort;
 import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -105,7 +108,30 @@ public class PlanningOrchestrator implements PlanningInputPort {
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
             log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
-            List<UserStory> brokenDown = breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity);
+            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity));
+
+            // Inject carry-over tasks as a synthetic story before estimation
+            List<CarryoverTaskDto> carryovers = request.carryoverTasks();
+            if (carryovers != null && !carryovers.isEmpty()) {
+                UserStory carryoverStory = new UserStory(
+                    UUID.randomUUID(), null, "Carry-over from previous sprint",
+                    "Carry-over from previous sprint", 0, "PLANNED"
+                );
+                List<Task> carryoverTasks = new ArrayList<>();
+                for (CarryoverTaskDto dto : carryovers) {
+                    Task task = new Task(
+                        UUID.randomUUID(), carryoverStory.getId(), dto.previousAssignedDevId(),
+                        dto.taskTitle(), dto.description(), dto.acceptanceCriterion(),
+                        dto.roleTag(), dto.storyPoints(), "PLANNED", null
+                    );
+                    carryoverTasks.add(task);
+                }
+                carryoverStory.setTasks(carryoverTasks);
+                brokenDown.add(carryoverStory);
+                push(userId, "breakdown", "Carry-over: injected " + carryovers.size() + " task(s) from previous sprint.");
+                log.info("[Planning] teamId={} — injected {} carry-over tasks", request.teamId(), carryovers.size());
+            }
+
             int storyCount = brokenDown.size();
             int taskCount = brokenDown.stream().mapToInt(s -> s.getTasks() == null ? 0 : s.getTasks().size()).sum();
             push(userId, "breakdown", "Breakdown complete: " + storyCount + " stories, " + taskCount + " tasks.");
@@ -141,6 +167,14 @@ public class PlanningOrchestrator implements PlanningInputPort {
                     java.util.LinkedHashMap::new
                 ));
 
+            Map<UUID, String> developerNames = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Developer::getId,
+                    Developer::getName,
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
             push(userId, "distribution", "Assigning " + taskCount + " tasks to " + developers.size() + " developer(s)...");
             log.info("[Planning] teamId={} — distribution start", request.teamId());
             SprintPlan result = distributionPort.distribute(
@@ -149,6 +183,7 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 estimated,
                 capacityByDeveloper,
                 developerCapabilities,
+                developerNames,
                 teamProfileMemory,
                 effectiveSprintHistory
             );

@@ -20,6 +20,7 @@ import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
 import { HelpTooltip } from '../../components/shared/HelpTooltip';
+import { TeamMemoryPanel } from '../profile/TeamMemoryPanel';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 
@@ -44,6 +45,7 @@ export function TeamSetupPage() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editCapabilities, setEditCapabilities] = useState<CapabilityTag[]>([]);
+  const [memoryTeamId, setMemoryTeamId] = useState<string | null>(null);
   const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack'];
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
     useTeamSetup(selectedTeamId);
@@ -98,6 +100,14 @@ export function TeamSetupPage() {
     setTrelloMembers(null);
     setMemberMappings({});
   }, [selectedTeamId]);
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMemoryTeamId(null);
+    };
+    document.addEventListener('keydown', handleEsc);
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, []);
 
   const activeSprintQuery = useQuery({
     queryKey: ['active-sprint'],
@@ -170,11 +180,11 @@ export function TeamSetupPage() {
       ) : null}
       <section className="grid gap-6">
         <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
             <button
               type="button"
-              className="rounded-lg bg-blue-500/85 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-600/85 disabled:opacity-50"
+              className="w-full rounded-lg bg-blue-500/85 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-600/85 disabled:opacity-50 sm:w-auto"
               onClick={handleLoadSamples}
               disabled={isLoadingSamples}
               title="Load 2 sample teams (PayFlow & ShopHub) with developers and realistic epics"
@@ -224,20 +234,29 @@ export function TeamSetupPage() {
 
           <div className="grid gap-3">
             {teamsQuery.data?.map((team) => (
-              <button
-                key={team.id}
-                className={`rounded-xl border p-4 text-left transition ${
-                  selectedTeamId === team.id
-                    ? 'border-emerald-300/60 bg-emerald-400/12'
-                    : 'border-white/10 bg-slate-950/45 hover:border-slate-300/30 hover:bg-slate-900/55'
-                }`}
-                onClick={() => setSelectedTeamId(team.id)}
-              >
-                <p className="font-semibold text-slate-100">{team.name}</p>
-                <p className="text-xs text-slate-300">
-                  {team.domain} • {team.sprintLengthDays} days
-                </p>
-              </button>
+              <div key={team.id} className="flex items-stretch gap-2">
+                <button
+                  className={`flex-1 rounded-xl border p-4 text-left transition ${
+                    selectedTeamId === team.id
+                      ? 'border-emerald-300/60 bg-emerald-400/12'
+                      : 'border-white/10 bg-slate-950/45 hover:border-slate-300/30 hover:bg-slate-900/55'
+                  }`}
+                  onClick={() => setSelectedTeamId(team.id)}
+                >
+                  <p className="font-semibold text-slate-100">{team.name}</p>
+                  <p className="text-xs text-slate-300">
+                    {team.domain} • {team.sprintLengthDays} days
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  title="View AI memory for this team"
+                  onClick={() => setMemoryTeamId(team.id)}
+                  className="rounded-xl border border-white/10 bg-slate-950/45 px-3 text-base hover:bg-slate-800/40 hover:border-teal-500/30 transition"
+                >
+                  🧠
+                </button>
+              </div>
             ))}
           </div>
         </article>
@@ -348,16 +367,16 @@ export function TeamSetupPage() {
                   </div>
                 ) : null}
                 {isTrelloConnected && (
-                  <div className="flex gap-2 items-center">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <input
-                      className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm bg-slate-900 text-slate-200 placeholder:text-slate-500"
+                      className="flex-1 rounded-lg border border-slate-500/40 px-3 py-2 text-sm bg-slate-900 text-slate-200 placeholder:text-slate-500"
                       placeholder="Or paste board ID manually"
                       value={trelloBoardInput}
                       onChange={(e) => setTrelloBoardInput(e.target.value)}
                     />
                     <button
                       type="button"
-                      className="rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      className="min-h-[44px] w-full rounded-lg bg-blue-500/85 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 sm:w-auto"
                       disabled={!trelloBoardInput.trim() || linkBoardMutation.isPending}
                       onClick={() => {
                         const boardId = trelloBoardInput.trim();
@@ -405,13 +424,13 @@ export function TeamSetupPage() {
                         <p className="text-xs text-slate-400">Map each Trello member to a developer on this team:</p>
                         <div className="space-y-2">
                           {trelloMembers.map((member) => (
-                            <div key={member.id} className="flex items-center gap-3">
+                            <div key={member.id} className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-slate-200 truncate">{member.fullName}</p>
                                 <p className="text-xs text-slate-500">@{member.username}</p>
                               </div>
                               <select
-                                className="rounded-lg border border-slate-500/40 bg-slate-900 px-2 py-1.5 text-sm text-slate-200"
+                                className="w-full rounded-lg border border-slate-500/40 bg-slate-900 px-2 py-2 text-sm text-slate-200 sm:w-auto"
                                 value={memberMappings[member.id] ?? ''}
                                 onChange={(e) =>
                                   setMemberMappings((prev) => ({ ...prev, [member.id]: e.target.value }))
@@ -543,21 +562,24 @@ export function TeamSetupPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-2">
                           {developer.trelloMemberId ? (
-                            <span className="text-emerald-400 text-sm" title="Trello member linked">✓</span>
+                            <span className="mt-0.5 shrink-0 text-emerald-400 text-sm" title="Trello member linked">✓</span>
                           ) : null}
-                          <div>
+                          <div className="min-w-0">
                             <p className="font-medium text-slate-100">{developer.name}</p>
                             <p className="text-xs uppercase tracking-wide text-slate-300">
-                              {developer.role} • {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
+                              {developer.role}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
                             </p>
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 sm:shrink-0">
                           <button
-                            className="rounded-md border border-slate-500/40 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800/40"
+                            className="min-h-[44px] flex-1 rounded-md border border-slate-500/40 px-3 py-1 text-sm text-slate-300 hover:bg-slate-800/40 sm:flex-none"
                             onClick={() => {
                               setEditingDevId(developer.id);
                               setEditName(developer.name);
@@ -568,7 +590,7 @@ export function TeamSetupPage() {
                             Edit
                           </button>
                           <button
-                            className="rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200"
+                            className="min-h-[44px] flex-1 rounded-md border border-rose-300/45 bg-rose-400/10 px-3 py-1 text-sm text-rose-200 sm:flex-none"
                             onClick={() =>
                               removeDeveloperMutation.mutate({ teamId: selectedTeam.id, developerId: developer.id })
                             }
@@ -585,6 +607,30 @@ export function TeamSetupPage() {
           ) : null}
         </article>
       </section>
+
+      {/* Memory modal */}
+      {memoryTeamId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setMemoryTeamId(null); }}
+        >
+          <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-slate-100">
+                AI Memory — {teamsQuery.data?.find((t) => t.id === memoryTeamId)?.name}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setMemoryTeamId(null)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-800/50 hover:text-slate-300 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <TeamMemoryPanel teamId={memoryTeamId} />
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }

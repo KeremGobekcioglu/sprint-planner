@@ -39,6 +39,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             List<UserStory> estimatedUserStories,
             Map<UUID, Integer> capacityByDeveloper,
             Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerNames,
             String teamProfileMemory,
             String sprintHistoryMemory
     ) {
@@ -59,10 +60,15 @@ public class GeminiDistributionAdapter implements DistributionPort {
         logger.info("[DISTRIBUTION] Developer capabilities: {}",
             developerCapabilities == null ? "null" :
             developerCapabilities.entrySet().stream()
-                .map(e -> e.getKey().toString().substring(0, Math.min(8, e.getKey().toString().length())) + "=" + e.getValue())
+                .map(e -> {
+                    String name = developerNames != null
+                        ? developerNames.getOrDefault(e.getKey(), e.getKey().toString().substring(0, 8))
+                        : e.getKey().toString().substring(0, Math.min(8, e.getKey().toString().length()));
+                    return name + "=" + e.getValue();
+                })
                 .collect(java.util.stream.Collectors.joining(", ")));
         if (estimatedUserStories == null || estimatedUserStories.isEmpty()) {
-            return new SprintPlan(teamId, sprintGoal, List.of(), List.of(), null);
+            return new SprintPlan(teamId, sprintGoal, List.of(), List.of(), null, null);
         }
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {
             return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories, List.of());
@@ -70,7 +76,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         String prompt = buildPrompt(
                 estimatedUserStories, capacityByDeveloper, developerCapabilities,
-                teamProfileMemory, sprintHistoryMemory
+                developerNames, teamProfileMemory, sprintHistoryMemory
         );
 
         String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION);
@@ -86,15 +92,34 @@ public class GeminiDistributionAdapter implements DistributionPort {
     }
 
     private SprintPlan convertToSprintPlan(UUID teamId, String sprintGoal, List<UserStory> userStories, List<Task> unassignedTasks) {
+        Set<UUID> unassignedIds = (unassignedTasks == null || unassignedTasks.isEmpty())
+            ? Set.of()
+            : unassignedTasks.stream().map(Task::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<com.sprintplanner.domain.dto.UserStoryDto> storyDtos = userStories.stream()
+            .map(story -> {
+                List<com.sprintplanner.domain.dto.TaskDto> filteredTasks = story.getTasks() == null
+                    ? List.of()
+                    : story.getTasks().stream()
+                        .filter(t -> !unassignedIds.contains(t.getId()))
+                        .map(SprintPlanMapper::toDto)
+                        .toList();
+                return new com.sprintplanner.domain.dto.UserStoryDto(
+                    story.getId(), story.getSprintId(), story.getEpicTitle(),
+                    story.getTitle(), story.getStoryPoints(), story.getStatus(), filteredTasks
+                );
+            })
+            .toList();
+
         return new SprintPlan(
             teamId,
             sprintGoal,
-            userStories.stream()
-                .map(SprintPlanMapper::toDto)
-                .toList(),
+            storyDtos,
             unassignedTasks == null
                 ? List.of()
                 : unassignedTasks.stream().map(SprintPlanMapper::toDto).toList(),
+            null,
             null
         );
     }
@@ -105,6 +130,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             List<UserStory> stories,
             Map<UUID, Integer> capacityByDeveloper,
             Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerNames,
             String teamProfile,
             String sprintHistory
     ) {
@@ -112,16 +138,26 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         sb.append("You are an expert sprint planner. Assign each task to a developer.\n\n");
 
-        sb.append("## Developers and their capacity (story points available)\n");
+        sb.append("## Developers and their capacity\n");
         for (Map.Entry<UUID, Integer> entry : capacityByDeveloper.entrySet()) {
             List<String> capabilities = developerCapabilities == null
                 ? List.of()
                 : developerCapabilities.getOrDefault(entry.getKey(), List.of());
-            sb.append("- developerId: ").append(entry.getKey())
+            String name = developerNames != null
+                ? developerNames.getOrDefault(entry.getKey(), entry.getKey().toString())
+                : entry.getKey().toString();
+            sb.append("- ").append(name)
+                .append(" (developerId: ").append(entry.getKey()).append(")")
                 .append(" | capabilities: ").append(capabilities.isEmpty() ? "none" : String.join(", ", capabilities))
                 .append(" | capacity: ").append(entry.getValue()).append(" pts\n");
         }
         sb.append("\n");
+
+        if (sprintHistory != null && !sprintHistory.isBlank()) {
+            sb.append("## Developer Performance Notes\n");
+            sb.append("Use this to prefer developers with better track records for task types:\n");
+            sb.append(sprintHistory).append("\n\n");
+        }
 
         sb.append("## Tasks to assign\n");
         for (UserStory story : stories) {
@@ -155,15 +191,15 @@ public class GeminiDistributionAdapter implements DistributionPort {
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a valid JSON array. No explanation, no markdown, no backticks.\n");
         sb.append("Each element is either:\n");
-        sb.append("- { \"taskId\": \"<uuid>\", \"developerId\": \"<uuid>\", \"overCapacity\": <true|false> }\n");
-        sb.append("- { \"taskId\": \"<uuid>\", \"unassigned\": true }\n\n");
+        sb.append("- { \"taskId\": \"<uuid>\", \"developerId\": \"<uuid>\", \"overCapacity\": false, \"reason\": \"<one sentence why>\" }\n");
+        sb.append("- { \"taskId\": \"<uuid>\", \"unassigned\": true, \"reason\": \"<why unassigned>\" }\n\n");
 
         sb.append("## Example Output\n");
         sb.append("""
             [
-              { "taskId": "aaa-111", "developerId": "dev-001", "overCapacity": false },
-              { "taskId": "bbb-222", "unassigned": true },
-              { "taskId": "ccc-333", "developerId": "dev-001", "overCapacity": true }
+              { "taskId": "aaa-111", "developerId": "dev-001", "overCapacity": false, "reason": "Jordan has backend capability and available capacity." },
+              { "taskId": "bbb-222", "unassigned": true, "reason": "No developer with QA capability has remaining capacity." },
+              { "taskId": "ccc-333", "developerId": "dev-001", "overCapacity": true, "reason": "Only developer with frontend capability, assigned despite over capacity." }
             ]
             """);
 
@@ -211,6 +247,9 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
                 Task task = taskById.get(taskId);
                 if (task == null) continue;
+
+                String reason = node.path("reason").asText(null);
+                task.setAssignmentReason(reason);
 
                 if (unassigned) {
                     task.setAssignedDevId(null);

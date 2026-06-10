@@ -59,6 +59,10 @@ public class Task {
     @Column(name = "trello_card_id")
     private String trelloCardId;
 
+    /** One-sentence reason the distribution agent chose this assignment. Nullable. */
+    @Column(name = "assignment_reason", length = 500)
+    private String assignmentReason;
+
     public Task() {}
 
     public Task(UUID id, UUID storyId, UUID assignedDevId, String title, String description,
@@ -90,6 +94,7 @@ public class Task {
     public int getStoryPoints() { return storyPoints; }
     public String getStatus() { return status; }
     public String getTrelloCardId() { return trelloCardId; }
+    public String getAssignmentReason() { return assignmentReason; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -105,4 +110,5 @@ public class Task {
     public void setStoryPoints(int storyPoints) { this.storyPoints = storyPoints; }
     public void setStatus(String status) { this.status = status; }
     public void setTrelloCardId(String trelloCardId) { this.trelloCardId = trelloCardId; }
+    public void setAssignmentReason(String assignmentReason) { this.assignmentReason = assignmentReason; }
 }

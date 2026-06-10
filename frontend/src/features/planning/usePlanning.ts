@@ -26,7 +26,7 @@ export function usePlanning(teamId: string | undefined) {
     queryKey: ['planning-status'],
     queryFn: getPlanningStatus,
     enabled: planMutation.isPending,
-    refetchInterval: planMutation.isPending ? 600 : false,
+    refetchInterval: planMutation.isPending ? 2500 : false,
     staleTime: 0,
   });
 
@@ -36,6 +36,6 @@ export function usePlanning(teamId: string | undefined) {
       ...planMutation,
       submittedAt: planMutation.submittedAt ?? null,
     },
-    planningSteps: statusQuery.data ?? [],
+    planningSteps: planMutation.isIdle ? [] : (statusQuery.data ?? []),
   };
 }

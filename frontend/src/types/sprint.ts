@@ -37,4 +37,5 @@ export interface Task {
   storyPoints: number;
   status: string;
   trelloCardId?: string;
+  assignmentReason?: string;
 }

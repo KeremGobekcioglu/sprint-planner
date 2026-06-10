@@ -57,7 +57,7 @@ export function Navbar() {
         </span>
 
         {/* Desktop nav links */}
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-1 sm:flex">
           <NavLink to="/dashboard" className={navLinkClass}>
             Dashboard
           </NavLink>
@@ -85,7 +85,7 @@ export function Navbar() {
         {isAuthenticated && !isTrelloConnected && (
           <NavLink
             to="/profile#trello"
-            className="mr-3 hidden items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors md:flex"
+            className="mr-3 hidden items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors sm:flex"
           >
             🔗 Connect Trello
           </NavLink>
@@ -97,7 +97,7 @@ export function Navbar() {
             <button
               type="button"
               onClick={() => setDropdownOpen((prev) => !prev)}
-              className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200 transition-colors hover:bg-slate-700/40"
+              className="flex min-h-[44px] items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-200 transition-colors hover:bg-slate-700/40"
             >
               <span className="relative">
                 <span
@@ -118,14 +118,14 @@ export function Navbar() {
             </button>
 
             {dropdownOpen && (
-              <div className="absolute right-0 top-full z-10 mt-1 w-48 rounded-xl border border-white/10 bg-slate-900/95 py-1 shadow-card backdrop-blur-xl">
+              <div className="absolute right-0 top-full z-10 mt-1 w-48 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-slate-900/95 py-1 shadow-card backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => {
                     navigate('/profile');
                     setDropdownOpen(false);
                   }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-700/50"
+                  className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-700/50"
                 >
                   <span>👤</span>
                   <span>Profile</span>
@@ -133,7 +133,7 @@ export function Navbar() {
                 <button
                   type="button"
                   disabled
-                  className="flex w-full cursor-not-allowed items-center justify-between px-4 py-2 text-sm text-slate-500"
+                  className="flex min-h-[44px] w-full cursor-not-allowed items-center justify-between px-4 py-2 text-sm text-slate-500"
                 >
                   <span className="flex items-center gap-2">
                     <span>⚙️</span>
@@ -147,7 +147,7 @@ export function Navbar() {
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
+                  className="flex min-h-[44px] w-full items-center gap-2 px-4 py-2 text-sm text-red-400 transition-colors hover:bg-red-500/10"
                 >
                   <span>🚪</span>
                   <span>Logout</span>
@@ -161,7 +161,7 @@ export function Navbar() {
         <button
           type="button"
           onClick={() => setMobileMenuOpen((prev) => !prev)}
-          className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-700/40 md:hidden"
+          className="ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-slate-300 transition-colors hover:bg-slate-700/40 sm:hidden"
           aria-label="Toggle navigation"
         >
           {mobileMenuOpen ? '✕' : '☰'}
@@ -170,25 +170,43 @@ export function Navbar() {
 
       {/* Mobile nav drawer */}
       {mobileMenuOpen && (
-        <div className="border-t border-white/10 md:hidden">
+        <div className="border-t border-white/10 sm:hidden">
           <div className="flex flex-col gap-1 px-4 py-3">
             <NavLink
               to="/dashboard"
-              className={navLinkClass}
+              className={({ isActive }) =>
+                `flex min-h-[44px] items-center px-3 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-slate-700/70 text-slate-100'
+                    : 'text-slate-300 hover:text-slate-100 hover:bg-slate-700/40'
+                }`
+              }
               onClick={() => setMobileMenuOpen(false)}
             >
               Dashboard
             </NavLink>
             <NavLink
               to="/teams"
-              className={navLinkClass}
+              className={({ isActive }) =>
+                `flex min-h-[44px] items-center px-3 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-slate-700/70 text-slate-100'
+                    : 'text-slate-300 hover:text-slate-100 hover:bg-slate-700/40'
+                }`
+              }
               onClick={() => setMobileMenuOpen(false)}
             >
               Teams
             </NavLink>
             <NavLink
               to="/faq"
-              className={navLinkClass}
+              className={({ isActive }) =>
+                `flex min-h-[44px] items-center px-3 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-slate-700/70 text-slate-300'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700/40'
+                }`
+              }
               onClick={() => setMobileMenuOpen(false)}
             >
               FAQ
@@ -196,7 +214,7 @@ export function Navbar() {
             {isAuthenticated && !isTrelloConnected && (
               <NavLink
                 to="/profile#trello"
-                className="px-3 py-1.5 text-xs text-slate-500"
+                className="flex min-h-[44px] items-center px-3 text-xs text-slate-500"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 🔗 Connect Trello

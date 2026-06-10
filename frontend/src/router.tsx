@@ -6,6 +6,7 @@ import { TeamSetupPage } from './features/team-setup/TeamSetupPage';
 import { PlanningPage } from './features/planning/PlanningPage';
 import { ReviewPage } from './features/review/ReviewPage';
 import { SprintClosePage } from './features/sprint-close/SprintClosePage';
+import { RetrospectivePage } from './features/sprint-close/RetrospectivePage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
@@ -66,6 +67,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <SprintClosePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/sprints/:sprintId/retrospective',
+    element: (
+      <ProtectedRoute>
+        <RetrospectivePage />
       </ProtectedRoute>
     ),
   },

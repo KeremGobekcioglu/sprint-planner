@@ -8,8 +8,10 @@ import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useReviewStore } from '../../store/reviewStore';
+import { usePlanningStore } from '../../store/planningStore';
 import type { MismatchWarning as MismatchWarningType } from '../../types/planning';
 import type { Task } from '../../types/sprint';
+import { ConfidenceForecast } from '../planning/ConfidenceForecast';
 import { DeveloperLane } from './DeveloperLane';
 import { MismatchWarning } from './MismatchWarning';
 import { useReview } from './useReview';
@@ -19,12 +21,14 @@ export function ReviewPage() {
   const { sprintId } = useParams();
   const navigate = useNavigate();
   const { dismissedWarnings, dismissWarning, toggleDeferred, isDeferred, addEdit, reset } = useReviewStore();
+  const { confidence } = usePlanningStore();
   const queryClient = useQueryClient();
   const { planQuery, developersQuery, teamQuery, approveMutation, pushTrelloMutation, logEditMutation } = useReview(sprintId);
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [storyPointOverrides, setStoryPointOverrides] = useState<Record<string, number>>({});
   const [sprintPlanCollapsed, setSprintPlanCollapsed] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [openGuidanceTaskId, setOpenGuidanceTaskId] = useState<string | null>(null);
   const [trelloNoticeDismissed, setTrelloNoticeDismissed] = useState(
     () => localStorage.getItem('trello_notice_dismissed') === 'true',
   );
@@ -111,11 +115,11 @@ export function ReviewPage() {
       title="Review"
       subtitle="Inspect, edit and rebalance the plan before pushing anything to Trello."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {planQuery.data?.sprintStatus === 'PLANNING' && (
             <div className="flex items-center gap-1.5">
               <button
-                className="rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-[44px] w-full rounded-lg border border-red-500/40 bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-900/30 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={deleteMutation.isPending}
                 onClick={() => setDeleteDialogOpen(true)}
               >
@@ -138,6 +142,7 @@ export function ReviewPage() {
                 position="bottom"
               />
               <span
+                className="w-full sm:w-auto"
                 title={
                   !isTrelloConnected
                     ? 'Connect Trello on your profile first'
@@ -147,7 +152,7 @@ export function ReviewPage() {
                 }
               >
               <button
-                className="rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="min-h-[44px] w-full rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                 disabled={
                   !planQuery.data ||
                   !hasReviewedAllWarnings ||
@@ -204,6 +209,8 @@ export function ReviewPage() {
         {!planQuery.isLoading && !planQuery.data ? (
           <ErrorBanner message="Sprint data is not available. Generate a plan again before opening review." />
         ) : null}
+
+        {confidence && <ConfidenceForecast forecast={confidence} />}
 
         {planQuery.data?.sprintStatus === 'PLANNING' && (!isTrelloConnected || !hasTrelloBoard) && (
           <div className="flex items-center justify-between rounded-xl border border-amber-500/30 bg-amber-900/20 px-4 py-3 text-sm">
@@ -327,7 +334,8 @@ export function ReviewPage() {
           </div>
         )}
 
-        <div className="grid gap-4 pb-32 md:grid-cols-2 xl:grid-cols-3">
+        <p className="hidden text-xs text-slate-500 sm:block">Drag tasks between lanes to reassign developers.</p>
+        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
               key={developerId}
@@ -340,6 +348,9 @@ export function ReviewPage() {
                 (developersQuery.data ?? []).find((d) => d.id === developerId)?.baseVelocity ??
                 20
               }
+              sprintId={effectiveSprintId ?? ''}
+              openGuidanceTaskId={openGuidanceTaskId}
+              onGuidanceToggle={setOpenGuidanceTaskId}
               onDropTask={(taskId, targetDeveloperId) => {
                 const sourceTask = allTasks.find((task) => task.id === taskId);
                 if (!sourceTask || !effectiveSprintId) return;

@@ -23,7 +23,8 @@ export function HelpTooltip({ text, position = 'top' }: HelpTooltipProps) {
         onMouseLeave={() => setVisible(false)}
         onFocus={() => setVisible(true)}
         onBlur={() => setVisible(false)}
-        className="flex h-4 w-4 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400 hover:border-slate-400 hover:text-slate-200 focus:outline-none"
+        onClick={() => setVisible((v) => !v)}
+        className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400 hover:border-slate-400 hover:text-slate-200 focus:outline-none"
         aria-label="Help"
       >
         ?
@@ -31,7 +32,7 @@ export function HelpTooltip({ text, position = 'top' }: HelpTooltipProps) {
       {visible && (
         <span
           role="tooltip"
-          className={`pointer-events-none absolute z-50 w-56 rounded-lg bg-slate-700 px-3 py-2 text-xs leading-relaxed text-slate-100 shadow-xl ${POSITION_CLASS[position]}`}
+          className={`pointer-events-none absolute z-50 max-w-[min(14rem,calc(100vw-2rem))] rounded-lg bg-slate-700 px-3 py-2 text-xs leading-relaxed text-slate-100 shadow-xl ${POSITION_CLASS[position]}`}
         >
           {text}
         </span>

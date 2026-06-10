@@ -1,112 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
-import { HelpTooltip } from '../../components/shared/HelpTooltip';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { useProfile } from '../../hooks/useProfile';
-import { useTeamMemory } from '../../hooks/useTeamMemory';
-import { clearTeamProfile, getTrelloStatus, disconnectTrello } from '../../api/profileApi';
+import { getTrelloStatus, disconnectTrello } from '../../api/profileApi';
 import type { TeamSummary } from '../../api/profileApi';
+import { TeamMemoryPanel } from './TeamMemoryPanel';
 
 function MemoryPanel({ team }: { team: TeamSummary }) {
   const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
-  const { data, isLoading, isError } = useTeamMemory(open ? team.teamId : null);
-
-  const clearMutation = useMutation({
-    mutationFn: () => clearTeamProfile(team.teamId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['team-memory', team.teamId] });
-    },
-    onError: (error) => {
-      console.error('Clear profile failed', error);
-    },
-  });
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/40">
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/40">
       <button
         type="button"
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-slate-800/20"
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="font-semibold text-slate-100">{team.name}</span>
-        <span className="text-slate-400">{open ? '▲' : '▼'}</span>
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-500/10 text-base">
+          🧠
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-100">{team.name}</p>
+          <p className="text-xs text-slate-500">
+            {team.completedSprints} sprint{team.completedSprints !== 1 ? 's' : ''} completed
+          </p>
+        </div>
+        <span className={`text-slate-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}>▼</span>
       </button>
 
-      {open ? (
-        <div className="border-t border-white/10 px-4 pb-4 pt-3">
-          {isLoading ? <LoadingSpinner label="Loading memory..." /> : null}
-          {isError ? <ErrorBanner message="Could not load memory files." /> : null}
-
-          {data ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-semibold text-slate-200">Team Preferences</p>
-                    <HelpTooltip
-                      text="Generated from your edits on the Review screen. The AI applies these preferences to future sprints."
-                      position="right"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <HelpTooltip
-                      text="Resets the AI's learned preferences for this team. Sprint history is preserved."
-                      position="left"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => clearMutation.mutate()}
-                      disabled={clearMutation.isPending || !data.teamProfile}
-                      className="rounded px-2 py-0.5 text-xs text-rose-300 hover:bg-rose-900/30 disabled:opacity-40"
-                    >
-                      {clearMutation.isPending ? 'Clearing...' : 'Clear preferences'}
-                    </button>
-                  </div>
-                </div>
-                <div className="prose prose-sm prose-invert max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-900 p-3 text-xs">
-                  {data.teamProfile ? (
-                    <ReactMarkdown>{data.teamProfile}</ReactMarkdown>
-                  ) : (
-                    <p className="text-slate-400">No preferences learned yet. Complete a sprint review to start.</p>
-                  )}
-                </div>
-                {data.teamProfileLastUpdated ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Last updated: {new Date(data.teamProfileLastUpdated).toLocaleDateString()}
-                  </p>
-                ) : null}
-              </div>
-
-              <div>
-                <div className="mb-2 flex items-center gap-1.5">
-                  <p className="text-sm font-semibold text-slate-200">Sprint History</p>
-                  <HelpTooltip
-                    text="Built from completed sprint reviews. Used to calibrate estimates and capacity."
-                    position="right"
-                  />
-                </div>
-                <div className="prose prose-sm prose-invert max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-900 p-3 text-xs">
-                  {data.sprintHistory ? (
-                    <ReactMarkdown>{data.sprintHistory}</ReactMarkdown>
-                  ) : (
-                    <p className="text-slate-400">No sprint history yet.</p>
-                  )}
-                </div>
-                {data.sprintHistoryLastUpdated ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    Last updated: {new Date(data.sprintHistoryLastUpdated).toLocaleDateString()}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
+      {open && (
+        <div className="border-t border-white/10 px-4 pb-5 pt-4">
+          <TeamMemoryPanel teamId={team.teamId} />
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -195,7 +124,7 @@ export function ProfilePage() {
                 {editingName ? (
                   <>
                     <input
-                      className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm text-slate-100"
+                      className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm text-slate-100"
                       value={nameInput}
                       onChange={(e) => setNameInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === 'Enter') saveName(); }}
@@ -303,36 +232,55 @@ export function ProfilePage() {
           ) : null}
 
           {profileQuery.data && profileQuery.data.teams.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-slate-200">
-                <thead>
-                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-400">
-                    <th className="pb-2 pr-4">Team</th>
-                    <th className="pb-2 pr-4">Domain</th>
-                    <th className="pb-2 pr-4">Developers</th>
-                    <th className="pb-2 pr-4">Sprints Completed</th>
-                    <th className="pb-2">Last Sprint</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profileQuery.data.teams.map((team) => (
-                    <tr
-                      key={team.teamId}
-                      className="cursor-pointer border-b border-white/5 hover:bg-slate-800/30"
-                      onClick={() => navigate(`/teams/${team.teamId}/plan`)}
-                    >
-                      <td className="py-2 pr-4 font-medium text-sky-300">{team.name}</td>
-                      <td className="py-2 pr-4 text-slate-400">{team.domain}</td>
-                      <td className="py-2 pr-4">{team.developerCount}</td>
-                      <td className="py-2 pr-4">{team.completedSprints}</td>
-                      <td className="py-2 text-slate-400">
-                        {team.lastSprintAt ? new Date(team.lastSprintAt).toLocaleDateString() : '—'}
-                      </td>
+            <>
+              {/* Mobile: card list */}
+              <div className="space-y-3 sm:hidden">
+                {profileQuery.data.teams.map((team) => (
+                  <button
+                    key={team.teamId}
+                    className="w-full rounded-lg border border-white/10 bg-slate-950/40 p-3 text-left hover:bg-slate-900/50"
+                    onClick={() => navigate(`/teams/${team.teamId}/plan`)}
+                  >
+                    <p className="font-medium text-sky-300">{team.name}</p>
+                    <p className="text-xs text-slate-400">{team.domain} · {team.developerCount} devs · {team.completedSprints} sprints</p>
+                    {team.lastSprintAt ? (
+                      <p className="text-xs text-slate-500">Last: {new Date(team.lastSprintAt).toLocaleDateString()}</p>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+              {/* Desktop: table */}
+              <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm text-slate-200">
+                  <thead>
+                    <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wide text-slate-400">
+                      <th className="pb-2 pr-4">Team</th>
+                      <th className="pb-2 pr-4">Domain</th>
+                      <th className="pb-2 pr-4">Developers</th>
+                      <th className="pb-2 pr-4">Sprints Completed</th>
+                      <th className="pb-2">Last Sprint</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {profileQuery.data.teams.map((team) => (
+                      <tr
+                        key={team.teamId}
+                        className="cursor-pointer border-b border-white/5 hover:bg-slate-800/30"
+                        onClick={() => navigate(`/teams/${team.teamId}/plan`)}
+                      >
+                        <td className="py-2 pr-4 font-medium text-sky-300">{team.name}</td>
+                        <td className="py-2 pr-4 text-slate-400">{team.domain}</td>
+                        <td className="py-2 pr-4">{team.developerCount}</td>
+                        <td className="py-2 pr-4">{team.completedSprints}</td>
+                        <td className="py-2 text-slate-400">
+                          {team.lastSprintAt ? new Date(team.lastSprintAt).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : null}
         </section>
 
@@ -352,7 +300,7 @@ export function ProfilePage() {
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-center">
                   <p className="text-2xl font-bold text-slate-100">{statsQuery.data.totalSprintsPlanned}</p>
                   <p className="mt-1 text-xs text-slate-400">Sprints planned</p>
@@ -377,10 +325,16 @@ export function ProfilePage() {
         </section>
 
         {/* Section 4 — Memory Viewer */}
-        <section className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
-          <h2 className="text-lg font-semibold text-slate-100">Memory Viewer</h2>
+        <section id="memory" className="scroll-mt-20 space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-slate-100">AI Memory</h2>
+            <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2 py-0.5 text-xs font-medium text-teal-300">
+              per team
+            </span>
+          </div>
           <p className="text-xs text-slate-400">
-            What the AI has learned from your past sprints. Expand a team to view.
+            What the AI has learned from your past sprints — team preferences and sprint history.
+            Expand a team to inspect or reset.
           </p>
 
           {profileQuery.data?.teams.map((team) => (

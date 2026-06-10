@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode } from '../../api/sprintApi';
+import { useNavigate, useParams, Link, useBlocker } from 'react-router-dom';
+import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode, getCarryoverTasks } from '../../api/sprintApi';
 import { getTeam } from '../../api/teamApi';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
-import type { PlanningRequest } from '../../types/planning';
+import type { CarryoverTask, PlanningRequest, SprintPlanWithId } from '../../types/planning';
 import type { TeamDomain } from '../../types/team';
+import { ConfidenceForecast } from './ConfidenceForecast';
 import { DomainSelector } from './DomainSelector';
 import { EpicInput } from './EpicInput';
 import { usePlanning } from './usePlanning';
@@ -36,16 +37,25 @@ const PHASE_LABEL: Record<string, string> = {
 export function PlanningPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
-  const { setSprint, setTeam } = usePlanningStore();
+  const { setSprint, setTeam, setConfidence } = usePlanningStore();
   const [isLoadingSamples, setIsLoadingSamples] = useState(false);
-  const [planGenerated, setPlanGenerated] = useState(false);
+  const [planResult, setPlanResult] = useState<SprintPlanWithId | null>(null);
+  const [blockReleased, setBlockReleased] = useState(false);
   const [previousSprintContext, setPreviousSprintContext] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [selectedCarryoverIds, setSelectedCarryoverIds] = useState<Set<string>>(new Set());
   const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
   const planningModeQuery = useQuery({
     queryKey: ['planningMode', teamId],
     queryFn: () => getPlanningMode(teamId as string),
     enabled: Boolean(teamId),
+  });
+
+  const carryoverQuery = useQuery<CarryoverTask[]>({
+    queryKey: ['carryover', teamId],
+    queryFn: () => getCarryoverTasks(teamId as string),
+    enabled: Boolean(teamId),
+    staleTime: 1000 * 60 * 5,
   });
 
   const teamQuery = useQuery({
@@ -109,20 +119,167 @@ export function PlanningPage() {
   }, [teamId, form]);
 
   const developers = developersQuery.data ?? [];
+  const carryoverTasks = carryoverQuery.data ?? [];
+
+  // Pre-select all carryover tasks when they load
+  useEffect(() => {
+    if (carryoverTasks.length > 0) {
+      setSelectedCarryoverIds(new Set(carryoverTasks.map((t) => t.taskId)));
+    }
+  }, [carryoverTasks.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Navigation block while AI pipeline is running
+  const shouldBlock = planMutation.isPending && !blockReleased;
+  const blocker = useBlocker(shouldBlock);
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') blocker.reset();
+  }, [blocker]);
+
+  // Auto-release block after 90s so user isn't permanently stuck on hang
+  useEffect(() => {
+    if (!planMutation.isPending) { setBlockReleased(false); return; }
+    const t = setTimeout(() => setBlockReleased(true), 90_000);
+    return () => clearTimeout(t);
+  }, [planMutation.isPending]);
+
+  useEffect(() => {
+    if (planMutation.isError) setBlockReleased(true);
+  }, [planMutation.isError]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (planMutation.isPending && !blockReleased) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [planMutation.isPending, blockReleased]);
+
+  // Result view — shown after successful generation instead of auto-redirect
+  if (planResult) {
+    const totalTasks = planResult.userStories.reduce((acc, s) => acc + s.tasks.length, 0);
+    const totalPoints = planResult.userStories.reduce((acc, s) => acc + s.storyPoints, 0);
+    return (
+      <PageLayout
+        title={teamQuery.data?.name ? `Sprint Planning — ${teamQuery.data.name}` : 'Sprint Planning'}
+        subtitle="Sprint plan generated successfully."
+      >
+        <div className="mx-auto max-w-2xl space-y-5">
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-5">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">✅</span>
+              <div>
+                <h2 className="font-semibold text-slate-100">Sprint plan generated</h2>
+                <p className="text-sm text-slate-400">
+                  {totalTasks} task{totalTasks !== 1 ? 's' : ''} across{' '}
+                  {planResult.userStories.length} user stor{planResult.userStories.length !== 1 ? 'ies' : 'y'}{' '}
+                  · {totalPoints} total points
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {planningSteps.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-xs">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pipeline Log</p>
+              <ul className="max-h-48 space-y-1 overflow-y-auto">
+                {(modeStep ? [modeStep, ...planningSteps] : planningSteps).map((step, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className={step.error ? 'text-red-400' : step.done ? 'text-emerald-400' : 'text-sky-400'}>
+                      {step.error ? '✗' : step.done ? '✓' : '›'}
+                    </span>
+                    <span className="text-slate-300">
+                      <span className="text-slate-500">[{PHASE_LABEL[step.phase] ?? step.phase}]</span>{' '}
+                      {step.message}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5 space-y-3">
+            <h3 className="font-semibold text-slate-200">What the AI applied</h3>
+            <div className="space-y-2 text-sm text-slate-400">
+              {modeData?.mode === 'CONTINUOUS' && modeData.hasTeamProfile && (
+                <div className="flex items-start gap-2">
+                  <span className="text-emerald-400 mt-0.5">✓</span>
+                  <span>Team preferences from {modeData.completedSprints} previous sprint{modeData.completedSprints === 1 ? '' : 's'} applied</span>
+                </div>
+              )}
+              {modeData?.mode === 'CONTINUOUS' && modeData.hasSprintHistory && (
+                <div className="flex items-start gap-2">
+                  <span className="text-emerald-400 mt-0.5">✓</span>
+                  <span>Sprint history used for estimation and capacity decisions</span>
+                </div>
+              )}
+              {modeData?.mode === 'FRESH' && (
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-400 mt-0.5">ℹ</span>
+                  <span>Fresh start — conservative defaults used. Memory builds after your first sprint review.</span>
+                </div>
+              )}
+              {(planResult.unassignedTasks?.length ?? 0) > 0 && (
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5">⚠️</span>
+                  <span>
+                    {planResult.unassignedTasks!.length} task{planResult.unassignedTasks!.length === 1 ? '' : 's'} unassigned —
+                    no developer with matching capability had remaining capacity.
+                    You can assign them manually on the Review screen.
+                  </span>
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <span className="text-slate-500 mt-0.5">→</span>
+                <span>Capacity-adjusted plan: each developer assigned within their sprint velocity</span>
+              </div>
+            </div>
+          </div>
+
+          {planResult.confidence && <ConfidenceForecast forecast={planResult.confidence} />}
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              onClick={() => navigate(`/sprints/${planResult.sprintId}/review`, { replace: true })}
+              className="flex-1 rounded-xl bg-emerald-500 px-6 py-3 font-semibold text-slate-950 hover:bg-emerald-400 transition-colors"
+            >
+              Review Plan →
+            </button>
+            <button
+              onClick={() => navigate('/dashboard', { replace: true })}
+              className="flex-1 rounded-xl border border-white/10 px-6 py-3 font-semibold text-slate-300 hover:bg-slate-800/40 transition-colors"
+            >
+              Go to Dashboard
+            </button>
+          </div>
+
+          <p className="text-center text-xs text-slate-500">
+            Your sprint plan is saved. You can also access it from the Dashboard at any time.
+          </p>
+        </div>
+      </PageLayout>
+    );
+  }
 
   return (
     <PageLayout
       title={teamQuery.data?.name ? `Sprint Planning — ${teamQuery.data.name}` : 'Sprint Planning'}
       subtitle="Feed epics and constraints, then generate a sprint plan draft."
     >
-      <div className="mb-4">
+      <div className="mb-4 flex items-center gap-3">
         <button
           type="button"
           onClick={() => navigate('/teams')}
-          className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+          disabled={shouldBlock}
+          className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40 disabled:cursor-not-allowed disabled:opacity-40"
         >
           ← Back to Teams
         </button>
+        {shouldBlock && (
+          <span className="text-xs text-amber-400">
+            AI pipeline running — navigation paused (auto-releases after 90s)
+          </span>
+        )}
       </div>
 
       {/* Mode info panel */}
@@ -192,6 +349,8 @@ const sanitizedDaysOff = Object.fromEntries(
         .filter(([_, val]) => (val as number) > 0)  // only send non-zero
 );
 
+const selectedCarryovers = carryoverTasks.filter((t) => selectedCarryoverIds.has(t.taskId));
+
 const payload: PlanningRequest = {
     teamId,
     domain: values.domain,
@@ -199,18 +358,73 @@ const payload: PlanningRequest = {
     epics,
     daysOff: sanitizedDaysOff,
     ...(previousSprintContext.trim() ? { previousSprintContext: previousSprintContext.trim() } : {}),
+    ...(selectedCarryovers.length > 0 ? { carryoverTasks: selectedCarryovers } : {}),
 };
 
             setTeam(teamId);
             planMutation.mutate(payload, {
               onSuccess: (plan) => {
                 setSprint(plan.sprintId);
-                setPlanGenerated(true);
-                setTimeout(() => navigate('/dashboard', { replace: true }), 2000);
+                setConfidence(plan.confidence ?? null);
+                setPlanResult(plan);
               },
             });
           })}
         >
+          {/* Carry-over panel — shown when previous sprint has NOT_DONE tasks */}
+          {carryoverTasks.length > 0 && (
+            <div className="rounded-xl border border-violet-500/30 bg-violet-950/20 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-violet-200">↩ Carry-over from previous sprint</p>
+                  <p className="mt-0.5 text-xs text-violet-400">"{carryoverTasks[0]?.sprintGoal}"</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-violet-500/40 px-2 py-1 text-xs text-violet-300 hover:bg-violet-800/30"
+                    onClick={() => setSelectedCarryoverIds(new Set(carryoverTasks.map((t) => t.taskId)))}
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-violet-500/40 px-2 py-1 text-xs text-violet-300 hover:bg-violet-800/30"
+                    onClick={() => setSelectedCarryoverIds(new Set())}
+                  >
+                    Deselect all
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {carryoverTasks.map((task) => (
+                  <label key={task.taskId} className="flex cursor-pointer items-start gap-3 rounded-lg border border-violet-500/20 bg-violet-950/30 p-2.5 hover:bg-violet-900/20">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-violet-500"
+                      checked={selectedCarryoverIds.has(task.taskId)}
+                      onChange={(e) => {
+                        setSelectedCarryoverIds((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(task.taskId);
+                          else next.delete(task.taskId);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-violet-100">{task.taskTitle}</p>
+                      <p className="mt-0.5 text-xs text-violet-400">
+                        {task.roleTag} · {task.storyPoints}pts ·{' '}
+                        {task.previousAssignedDevName ? `was assigned to ${task.previousAssignedDevName}` : 'was unassigned'}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Import previous sprint history — only in Fresh Start mode */}
           {isFresh ? (
             <div className="overflow-hidden rounded-xl border border-slate-600/40">
@@ -259,7 +473,7 @@ const payload: PlanningRequest = {
 
               <button
                 type="button"
-                className="rounded-lg bg-blue-500/85 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
+                className="min-h-[44px] rounded-lg bg-blue-500/85 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
                 onClick={async () => {
                   if (!teamId) return;
                   setIsLoadingSamples(true);
@@ -342,17 +556,11 @@ const payload: PlanningRequest = {
           </div>
 
           <button
-            className="rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60"
-            disabled={planMutation.isPending || planGenerated}
+            className="w-full rounded-lg bg-emerald-500/85 px-4 py-2 font-semibold text-slate-950 disabled:opacity-60 sm:w-auto"
+            disabled={planMutation.isPending}
           >
-            {planGenerated ? 'Sprint Generated ✓' : planMutation.isPending ? 'Generating...' : 'Generate Plan'}
+            {planMutation.isPending ? 'Generating...' : 'Generate Plan'}
           </button>
-
-          {planGenerated && (
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 p-3 text-sm text-emerald-300">
-              Sprint plan generated successfully. You can review and approve it whenever you're ready.
-            </div>
-          )}
         </form>
 
         {planMutation.isPending && planningSteps.length === 0 ? (
@@ -360,9 +568,9 @@ const payload: PlanningRequest = {
         ) : null}
 
         {planningSteps.length > 0 ? (
-          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-sm">
+          <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/60 p-4 font-mono text-xs sm:text-sm">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">Pipeline Log</p>
-            <ul className="space-y-1.5">
+            <ul className="max-h-64 space-y-1.5 overflow-y-auto">
               {pipelineEntries.map((step, i) => (
                 <li key={i} className="flex items-start gap-2">
                   <span className={

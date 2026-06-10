@@ -46,7 +46,7 @@ function ProgressIndicator({ step }: { step: number }) {
               {i < step ? '✓' : i + 1}
             </div>
             <span
-              className={`text-xs font-medium ${
+              className={`hidden text-xs font-medium sm:block ${
                 i === step ? 'text-slate-200' : i < step ? 'text-emerald-400' : 'text-slate-600'
               }`}
             >
@@ -55,7 +55,7 @@ function ProgressIndicator({ step }: { step: number }) {
           </div>
           {i < STEPS.length - 1 && (
             <div
-              className={`mx-1 mt-4 h-0.5 w-10 sm:w-16 transition-colors ${
+              className={`mx-1 mt-4 h-0.5 w-6 sm:w-16 transition-colors ${
                 i < step ? 'bg-emerald-400' : 'bg-slate-700'
               }`}
             />
@@ -437,7 +437,7 @@ export function OnboardingPage() {
       <div className="mx-auto max-w-2xl">
         <ProgressIndicator step={step} />
 
-        <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-6 shadow-xl sm:p-8">
+        <div className="rounded-3xl border border-white/10 bg-slate-900/50 p-4 shadow-xl sm:p-6">
           {step === 0 && <StepWelcome onNext={() => setStep(1)} />}
           {step === 1 && (
             <StepTeam

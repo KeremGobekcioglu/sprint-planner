@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.model.Task;
@@ -205,6 +206,14 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         sb.append("Assume backend tasks ~5pts, frontend ~3pts, qa ~2pts, devops ~3pts.\n");
         sb.append("Produce fewer stories per epic if needed — quality over quantity.\n");
         sb.append("Do NOT generate more work than the team can complete.\n\n");
+
+        List<CarryoverTaskDto> carryovers = request.carryoverTasks();
+        if (carryovers != null && !carryovers.isEmpty()) {
+            sb.append("## Carry-over Note\n");
+            sb.append("Note: ").append(carryovers.size())
+                .append(" carry-over task(s) from the previous sprint are included separately. ")
+                .append("Do not regenerate tasks for topics that appear to be carry-over work.\n\n");
+        }
 
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");

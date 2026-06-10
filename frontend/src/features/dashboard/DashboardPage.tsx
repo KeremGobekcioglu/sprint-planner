@@ -43,7 +43,7 @@ function ActiveSprintCard({ sprint }: { sprint: ActiveSprintSummary }) {
         </span>
       </div>
 
-      <p className="text-sm text-slate-200">{sprint.sprintGoal}</p>
+      <p className="line-clamp-2 text-sm text-slate-200">{sprint.sprintGoal}</p>
 
       <div className="flex gap-4 text-xs text-slate-400">
         <span>{sprint.storyCount} stories</span>
@@ -51,15 +51,15 @@ function ActiveSprintCard({ sprint }: { sprint: ActiveSprintSummary }) {
         <span>Started {formatDate(sprint.plannedAt)}</span>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <button
-          className="flex-1 rounded-lg bg-blue-500/85 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600/85"
+          className="flex-1 rounded-lg bg-blue-500/85 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-600/85"
           onClick={() => navigate(`/sprints/${sprint.sprintId}/review`)}
         >
           Continue to Review
         </button>
         <button
-          className="flex-1 rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40"
+          className="flex-1 rounded-lg border border-slate-500/40 px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800/40"
           onClick={() => navigate(`/sprints/${sprint.sprintId}/close`)}
         >
           Close Sprint
@@ -73,7 +73,7 @@ function TeamCard({ team }: { team: TeamSummary }) {
   const navigate = useNavigate();
   return (
     <button
-      className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-left hover:border-slate-300/30 hover:bg-slate-900/80 transition"
+      className="flex min-h-[100px] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-left hover:border-slate-300/30 hover:bg-slate-900/80 transition"
       onClick={() => navigate(`/teams/${team.teamId}/plan`)}
     >
       <p className="font-semibold text-slate-100">{team.name}</p>
@@ -95,28 +95,55 @@ function RecentSprintRow({ sprint }: { sprint: RecentSprintSummary }) {
   const navigate = useNavigate();
   const completionRate =
     sprint.plannedPts > 0 ? Math.round((sprint.completedPts / sprint.plannedPts) * 100) : 0;
+  const isClosed = sprint.goalResult !== null;
 
   return (
-    <button
-      className="flex w-full items-center gap-3 rounded-xl border border-white/5 bg-slate-950/40 p-3 text-left hover:bg-slate-900/50 transition"
-      onClick={() => navigate(`/sprints/${sprint.sprintId}/close`)}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-100">{sprint.teamName}</p>
-        <p className="truncate text-xs text-slate-400">{sprint.sprintGoal}</p>
-      </div>
+    <div className="flex items-center gap-2">
+      <button
+        className="flex min-h-[44px] flex-1 items-center gap-3 rounded-xl border border-white/5 bg-slate-950/40 p-3 text-left hover:bg-slate-900/50 transition"
+        onClick={() =>
+          navigate(isClosed ? `/sprints/${sprint.sprintId}/retrospective` : `/sprints/${sprint.sprintId}/close`)
+        }
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-slate-100">{sprint.teamName}</p>
+          <p className="truncate text-xs text-slate-400">{sprint.sprintGoal}</p>
+        </div>
 
-      {sprint.goalResult ? (
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${GOAL_RESULT_BADGE[sprint.goalResult]}`}>
-          {sprint.goalResult}
-        </span>
-      ) : null}
+        {sprint.goalResult ? (
+          <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${GOAL_RESULT_BADGE[sprint.goalResult]}`}>
+            {sprint.goalResult}
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-950/30 px-2 py-0.5 text-xs font-medium text-amber-300">
+            Needs close
+          </span>
+        )}
 
-      <div className="shrink-0 text-right">
-        <p className="text-sm font-semibold text-slate-100">{completionRate}%</p>
-        <p className="text-xs text-slate-500">{formatDate(sprint.submittedAt)}</p>
-      </div>
-    </button>
+        <div className="hidden shrink-0 text-right sm:block">
+          <p className="text-sm font-semibold text-slate-100">{completionRate}%</p>
+          <p className="text-xs text-slate-500">{formatDate(sprint.submittedAt)}</p>
+        </div>
+      </button>
+
+      {isClosed ? (
+        <button
+          className="shrink-0 rounded-lg border border-slate-500/40 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 transition"
+          onClick={() => navigate(`/sprints/${sprint.sprintId}/retrospective`)}
+          title="View retrospective report"
+        >
+          Retrospective
+        </button>
+      ) : (
+        <button
+          className="shrink-0 rounded-lg border border-amber-500/40 px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-900/20 transition"
+          onClick={() => navigate(`/sprints/${sprint.sprintId}/close`)}
+          title="Close this sprint"
+        >
+          Close →
+        </button>
+      )}
+    </div>
   );
 }
 

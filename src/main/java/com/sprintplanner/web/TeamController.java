@@ -1,12 +1,17 @@
 package com.sprintplanner.web;
 
 import com.sprintplanner.application.TeamService;
+import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.model.AppUser;
 import com.sprintplanner.domain.model.Developer;
+import com.sprintplanner.domain.model.Sprint;
+import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.Team;
+import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.MemoryReader;
 import com.sprintplanner.domain.port.out.MemoryWriter;
+import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import com.sprintplanner.infrastructure.external.TrelloApiClient;
 import com.sprintplanner.infrastructure.external.TrelloList;
@@ -21,6 +26,7 @@ import com.sprintplanner.web.dto.TeamHttpDto;
 import com.sprintplanner.web.dto.TeamMemoryResponse;
 import com.sprintplanner.web.dto.SeedSampleTeamsResponse;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,17 +50,20 @@ public class TeamController {
     private final TeamService teamService;
     private final TeamRepository teamRepository;
     private final DeveloperRepository developerRepository;
+    private final SprintRepository sprintRepository;
     private final MemoryReader memoryReader;
     private final MemoryWriter memoryWriter;
     private final TrelloApiClient trelloApiClient;
     private final JpaUserRepository userRepository;
 
     public TeamController(TeamService teamService, TeamRepository teamRepository,
-            DeveloperRepository developerRepository, MemoryReader memoryReader,
-            MemoryWriter memoryWriter, TrelloApiClient trelloApiClient, JpaUserRepository userRepository) {
+            DeveloperRepository developerRepository, SprintRepository sprintRepository,
+            MemoryReader memoryReader, MemoryWriter memoryWriter,
+            TrelloApiClient trelloApiClient, JpaUserRepository userRepository) {
         this.teamService = teamService;
         this.teamRepository = teamRepository;
         this.developerRepository = developerRepository;
+        this.sprintRepository = sprintRepository;
         this.memoryReader = memoryReader;
         this.memoryWriter = memoryWriter;
         this.trelloApiClient = trelloApiClient;
@@ -290,6 +299,53 @@ public class TeamController {
         developer.setTrelloMemberId(request.trelloMemberId());
         Developer saved = developerRepository.save(developer);
         return ResponseEntity.ok(DeveloperHttpDto.from(saved));
+    }
+
+    @GetMapping("/{teamId}/carryover")
+    public ResponseEntity<List<CarryoverTaskDto>> getCarryoverTasks(@PathVariable UUID teamId) {
+        List<Sprint> sprints = sprintRepository.findByTeamId(teamId);
+        java.util.Optional<Sprint> latestCompleted = sprints.stream()
+            .filter(s -> s.getStatus() == Sprint.Status.COMPLETED)
+            .max(Comparator.comparing(Sprint::getPlannedAt));
+
+        if (latestCompleted.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        Sprint sprint = sprintRepository.findWithStoriesAndTasksById(latestCompleted.get().getId())
+            .orElse(latestCompleted.get());
+
+        List<CarryoverTaskDto> result = new ArrayList<>();
+        List<UserStory> stories = sprint.getUserStories();
+        if (stories == null) return ResponseEntity.ok(List.of());
+
+        for (UserStory story : stories) {
+            List<Task> tasks = story.getTasks();
+            if (tasks == null) continue;
+            for (Task task : tasks) {
+                if (!"NOT_DONE".equals(task.getStatus())) continue;
+                String devName = null;
+                if (task.getAssignedDevId() != null) {
+                    devName = developerRepository.findById(task.getAssignedDevId())
+                        .map(Developer::getName).orElse(null);
+                }
+                result.add(new CarryoverTaskDto(
+                    task.getId(),
+                    sprint.getId(),
+                    sprint.getGoal(),
+                    story.getEpicTitle(),
+                    story.getTitle(),
+                    task.getTitle(),
+                    task.getDescription(),
+                    task.getAcceptanceCriterion(),
+                    task.getRoleTag(),
+                    task.getStoryPoints(),
+                    task.getAssignedDevId(),
+                    devName
+                ));
+            }
+        }
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/sample-data")
