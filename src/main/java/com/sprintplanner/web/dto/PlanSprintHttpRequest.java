@@ -12,6 +12,7 @@ public record PlanSprintHttpRequest(
     String sprintGoal,
     Map<UUID, Integer> daysOff,
     String previousSprintContext,
-    List<CarryoverTaskDto> carryoverTasks
+    List<CarryoverTaskDto> carryoverTasks,
+    String codebaseContext
 ) {
 }

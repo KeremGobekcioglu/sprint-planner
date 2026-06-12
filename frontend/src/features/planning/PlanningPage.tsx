@@ -8,16 +8,15 @@ import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
-import type { CarryoverTask, PlanningRequest, SprintPlanWithId } from '../../types/planning';
+import type { CarryoverTask, Epic, PlanningRequest, SprintPlanWithId } from '../../types/planning';
 import type { TeamDomain } from '../../types/team';
 import { ConfidenceForecast } from './ConfidenceForecast';
 import { DomainSelector } from './DomainSelector';
-import { EpicInput } from './EpicInput';
+import { EpicInput, parsePasteText } from './EpicInput';
 import { usePlanning } from './usePlanning';
 import { HelpTooltip } from '../../components/shared/HelpTooltip';
 
 interface PlanningFormValues {
-  epicsText: string;
   domain: TeamDomain;
   sprintGoal: string;
   daysOff: Record<string, number>;
@@ -43,6 +42,10 @@ export function PlanningPage() {
   const [blockReleased, setBlockReleased] = useState(false);
   const [previousSprintContext, setPreviousSprintContext] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [codebaseContext, setCodebaseContext] = useState('');
+  const [codebaseContextCollapsed, setCodebaseContextCollapsed] = useState(true);
+  const [epics, setEpics] = useState<Epic[]>([{ title: '', description: '' }]);
+  const [epicError, setEpicError] = useState('');
   const [selectedCarryoverIds, setSelectedCarryoverIds] = useState<Set<string>>(new Set());
   const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
   const planningModeQuery = useQuery({
@@ -88,7 +91,6 @@ export function PlanningPage() {
 
   const form = useForm<PlanningFormValues>({
     defaultValues: {
-      epicsText: '',
       domain: 'GENERIC',
       sprintGoal: '',
       daysOff: {},
@@ -107,11 +109,13 @@ export function PlanningPage() {
     getMockPlanningDefaults(teamId)
       .then((defaults) => {
         form.reset({
-          epicsText: defaults.epicsText,
           domain: 'GENERIC',
           sprintGoal: defaults.sprintGoal,
           daysOff: defaults.daysOff,
         });
+        if (defaults.epicsText) {
+          setEpics(parsePasteText(defaults.epicsText));
+        }
       })
       .catch(() => {
         // If not in mock mode or error, just skip prefill
@@ -329,19 +333,12 @@ export function PlanningPage() {
               return;
             }
 
-            const epics = values.epicsText
-              .split('\n')
-              .map((line) => line.trim())
-              .filter(Boolean)
-              .map((line) => {
-                const [rawTitle, ...descriptionParts] = line.split('|');
-                const title = (rawTitle ?? '').trim();
-                return {
-                  title,
-                  description: descriptionParts.join('|').trim() || title,
-                };
-              })
-              .filter((epic) => epic.title.length > 0);
+            const validEpics = epics.filter((e) => e.title.trim().length > 0);
+            if (validEpics.length === 0) {
+              setEpicError('At least one epic with a title is required.');
+              return;
+            }
+            setEpicError('');
 
 const sanitizedDaysOff = Object.fromEntries(
     Object.entries(values.daysOff)
@@ -355,10 +352,11 @@ const payload: PlanningRequest = {
     teamId,
     domain: values.domain,
     sprintGoal: values.sprintGoal,
-    epics,
+    epics: validEpics,
     daysOff: sanitizedDaysOff,
     ...(previousSprintContext.trim() ? { previousSprintContext: previousSprintContext.trim() } : {}),
     ...(selectedCarryovers.length > 0 ? { carryoverTasks: selectedCarryovers } : {}),
+    ...(codebaseContext.trim() ? { codebaseContext: codebaseContext.trim() } : {}),
 };
 
             setTeam(teamId);
@@ -467,9 +465,35 @@ const payload: PlanningRequest = {
             </div>
           ) : null}
 
+          {/* Codebase Context (optional) */}
+          <div className="overflow-hidden rounded-xl border border-slate-600/40">
+            <button
+              type="button"
+              onClick={() => setCodebaseContextCollapsed(!codebaseContextCollapsed)}
+              className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+            >
+              <span>📁 Add codebase context</span>
+              <span className="text-slate-500">{codebaseContextCollapsed ? '▼' : '▲'}</span>
+            </button>
+            {!codebaseContextCollapsed && (
+              <div className="space-y-2 border-t border-slate-600/40 px-4 pb-4 pt-3">
+                <p className="text-xs text-slate-400">
+                  Describe your tech stack and existing modules to help the AI generate
+                  accurate, non-redundant tasks.
+                </p>
+                <textarea
+                  className="w-full rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 min-h-[100px]"
+                  placeholder={`Stack: React, Spring Boot, PostgreSQL\nExisting: auth complete, team CRUD done\nIn progress: payment flow 50% done\nConventions: REST APIs, constructor injection\nConstraints: must support mobile browsers`}
+                  value={codebaseContext}
+                  onChange={(e) => setCodebaseContext(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
           <div>
-            <div className="flex items-center justify-between">
-              <p className="mb-1 text-sm font-semibold text-slate-100">Epics</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-semibold text-slate-100">Epics</p>
 
               <button
                 type="button"
@@ -479,7 +503,9 @@ const payload: PlanningRequest = {
                   setIsLoadingSamples(true);
                   try {
                     const defaults = await getSampleEpicsForPlanning(teamId);
-                    form.setValue('epicsText', defaults.epicsText);
+                    if (defaults.epicsText) {
+                      setEpics(parsePasteText(defaults.epicsText));
+                    }
                     form.setValue('sprintGoal', defaults.sprintGoal);
                   } finally {
                     setIsLoadingSamples(false);
@@ -491,7 +517,8 @@ const payload: PlanningRequest = {
                 {isLoadingSamples ? 'Loading...' : '⚡ Load Samples'}
               </button>
             </div>
-            <EpicInput control={form.control} name="epicsText" />
+            <EpicInput epics={epics} onChange={setEpics} />
+            {epicError && <p className="mt-1 text-xs text-red-400">{epicError}</p>}
           </div>
 
           <div>

@@ -125,7 +125,8 @@ public class SprintPlannerController {
             request.sprintGoal(),
             request.daysOff() == null ? Map.of() : request.daysOff(),
             request.previousSprintContext(),
-            request.carryoverTasks()
+            request.carryoverTasks(),
+            request.codebaseContext()
         );
         
         SprintPlan plan = planningInputPort.planSprint(planningRequest);
@@ -176,6 +177,7 @@ public class SprintPlannerController {
             }
         }
 
+        sprint.setCodebaseContext(request.codebaseContext());
         sprint.setUserStories(userStories);
         sprintRepository.save(sprint);
 
@@ -445,7 +447,7 @@ public class SprintPlannerController {
                 .map(Developer::getName).orElse("Unknown");
         }
 
-        String prompt = buildGuidancePrompt(task, devName, teamProfileMemory, sprintHistoryMemory);
+        String prompt = buildGuidancePrompt(task, devName, teamProfileMemory, sprintHistoryMemory, sprint.getCodebaseContext());
         String raw = geminiClientProvider.generate(prompt, 0.3f, GeminiClientProvider.MODEL_ESTIMATION);
 
         try {
@@ -466,7 +468,10 @@ public class SprintPlannerController {
         }
     }
 
-    private String buildGuidancePrompt(Task task, String devName, String teamProfile, String sprintHistory) {
+    private String buildGuidancePrompt(Task task, String devName, String teamProfile, String sprintHistory, String codebaseContext) {
+        String codebaseSection = (codebaseContext != null && !codebaseContext.isBlank())
+            ? "\nCodebase Context:\n" + codebaseContext + "\n"
+            : "";
         return """
             You are a senior software engineer giving implementation advice.
 
@@ -482,8 +487,8 @@ public class SprintPlannerController {
 
             Sprint History:
             %s
-
-            Provide:
+            %s
+            Provide practical guidance tailored to this specific tech stack and codebase state:
             1. 2-3 concrete implementation hints specific to this task
             2. Risk flags: patterns from history suggesting this task type is often underestimated or problematic
             3. A suggested approach in 2-4 numbered steps
@@ -498,7 +503,8 @@ public class SprintPlannerController {
                 task.getTitle(), task.getDescription(), task.getAcceptanceCriterion(),
                 task.getRoleTag(), task.getStoryPoints(), devName,
                 teamProfile != null ? teamProfile : "No preferences yet",
-                sprintHistory != null ? sprintHistory : "No history yet"
+                sprintHistory != null ? sprintHistory : "No history yet",
+                codebaseSection
             );
     }
 
