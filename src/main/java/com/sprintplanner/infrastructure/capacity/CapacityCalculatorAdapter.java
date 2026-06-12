@@ -3,25 +3,35 @@ package com.sprintplanner.infrastructure.capacity;
 import com.sprintplanner.domain.model.DevCompletion;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Sprint;
-import com.sprintplanner.domain.model.SprintReview;
 import com.sprintplanner.domain.port.out.CapacityPort;
 import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.service.CapacityCalculator;
+import com.sprintplanner.infrastructure.persistence.DevCompletionJpaRepository;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class CapacityCalculatorAdapter implements CapacityPort {
 
+    private static final Logger logger = LoggerFactory.getLogger(CapacityCalculatorAdapter.class);
+
     private final CapacityCalculator capacityCalculator;
     private final SprintRepository sprintRepository;
+    private final DevCompletionJpaRepository devCompletionRepository;
 
-    public CapacityCalculatorAdapter(SprintRepository sprintRepository) {
+    public CapacityCalculatorAdapter(
+        SprintRepository sprintRepository,
+        DevCompletionJpaRepository devCompletionRepository
+    ) {
         this.capacityCalculator = new CapacityCalculator();
         this.sprintRepository = sprintRepository;
+        this.devCompletionRepository = devCompletionRepository;
     }
 
     @Override
@@ -33,6 +43,8 @@ public class CapacityCalculatorAdapter implements CapacityPort {
         UUID teamId
     ) {
         Map<UUID, Double> completionRates = teamId != null ? computeCompletionRates(teamId) : Map.of();
+        logger.info("[CAPACITY] Team {}: {} developers have historical completion rates",
+            teamId, completionRates.size());
         return capacityCalculator.calculateCapacity(
             developers,
             sprintLengthDays,
@@ -42,31 +54,39 @@ public class CapacityCalculatorAdapter implements CapacityPort {
     }
 
     private Map<UUID, Double> computeCompletionRates(UUID teamId) {
-        List<Sprint> sprints = sprintRepository.findByTeamIdWithReviews(teamId);
+        List<Sprint> completedSprints = sprintRepository.findByTeamId(teamId)
+            .stream()
+            .filter(s -> s.getStatus() == Sprint.Status.COMPLETED)
+            .toList();
 
-        // devId -> [totalPlanned, totalCompleted]
-        Map<UUID, long[]> devTotals = new HashMap<>();
+        if (completedSprints.isEmpty()) return Map.of();
 
-        for (Sprint sprint : sprints) {
-            if (sprint.getStatus() != Sprint.Status.COMPLETED) continue;
-            SprintReview review = sprint.getSprintReview();
-            if (review == null || review.getDevCompletions() == null) continue;
+        Map<UUID, List<Double>> ratesByDev = new HashMap<>();
 
-            for (DevCompletion dc : review.getDevCompletions()) {
-                long[] totals = devTotals.computeIfAbsent(dc.getDeveloperId(), k -> new long[]{0, 0});
-                totals[0] += dc.getPlannedPts();
-                totals[1] += dc.getCompletedPts();
+        for (Sprint sprint : completedSprints) {
+            if (sprint.getSprintReview() == null) continue;
+            UUID reviewId = sprint.getSprintReview().getId();
+            List<DevCompletion> completions = devCompletionRepository.findByReviewId(reviewId);
+            for (DevCompletion dc : completions) {
+                if (dc.getPlannedPts() <= 0) continue;
+                double rate = (double) dc.getCompletedPts() / dc.getPlannedPts();
+                ratesByDev.computeIfAbsent(dc.getDeveloperId(), k -> new ArrayList<>()).add(rate);
             }
         }
 
-        Map<UUID, Double> rates = new HashMap<>();
-        for (Map.Entry<UUID, long[]> entry : devTotals.entrySet()) {
-            long planned = entry.getValue()[0];
-            long completed = entry.getValue()[1];
-            if (planned > 0) {
-                rates.put(entry.getKey(), Math.min(1.0, (double) completed / planned));
+        Map<UUID, Double> result = new HashMap<>();
+        for (Map.Entry<UUID, List<Double>> entry : ratesByDev.entrySet()) {
+            List<Double> rates = entry.getValue();
+            // Weight recent sprints more — same approach as ConfidenceCalculator
+            double totalWeight = 0;
+            double weightedSum = 0;
+            for (int i = 0; i < rates.size(); i++) {
+                double weight = i + 1;
+                weightedSum += rates.get(i) * weight;
+                totalWeight += weight;
             }
+            result.put(entry.getKey(), weightedSum / totalWeight);
         }
-        return rates;
+        return result;
     }
 }
