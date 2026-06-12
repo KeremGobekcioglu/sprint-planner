@@ -77,7 +77,7 @@ sprint-planner/
 │       └── resources/
 │           ├── application.properties
 │           └── db/
-│               └── migration/        # Flyway V1–V11 SQL files
+│               └── migration/        # Flyway V1–V12 SQL files (V12 adds codebase_context to sprint)
 ├── memory/                           # Runtime: per-team markdown memory files
 ├── pom.xml
 ├── AGENT_CONTEXT.md
@@ -201,7 +201,7 @@ sprint-planner/
 | `AppUser.java` | `app_user` | id, email, name, role, passwordHash, createdAt, **trelloToken** (added V8) |
 | `Team.java` | `team` | id, name, domain, sprintLengthDays, ownerId, trelloBoardId, createdAt. `@OneToMany` developers, sprints |
 | `Developer.java` | `developer` | id, teamId, name, role, capabilities (TEXT comma-separated), baseVelocity, trelloMemberId. `getCapabilities()` is `@Transient` — parses comma-separated string at runtime |
-| `Sprint.java` | `sprint` | id, teamId, sprintNumber, goal, domainOverride, status (enum PLANNING/IN_REVIEW/ACTIVE/COMPLETED), plannedAt, reviewedAt. `@OneToMany` userStories (`@OrderColumn("story_order")`). Has `@NamedEntityGraph("Sprint.withUserStoriesAndTasks")` |
+| `Sprint.java` | `sprint` | id, teamId, sprintNumber, goal, domainOverride, status (enum PLANNING/IN_REVIEW/ACTIVE/COMPLETED), plannedAt, reviewedAt, **codebaseContext** (TEXT, added V12 — stored from planning request for use in task guidance). `@OneToMany` userStories (`@OrderColumn("story_order")`). Has `@NamedEntityGraph("Sprint.withUserStoriesAndTasks")` |
 | `UserStory.java` | `user_story` | id, sprintId, epicTitle, title, storyPoints, status. `@OneToMany` tasks (`@OrderColumn("task_order")`) |
 | `Task.java` | `task` | id, storyId, assignedDevId, title, description, acceptanceCriterion, roleTag, storyPoints, status, trelloCardId, **assignmentReason** (added V10, nullable, max 500 chars) |
 | `SprintReview.java` | `sprint_review` | id, sprintId, goalResult (enum YES/PARTIALLY/NO), blockerNote, totalPlannedPts, totalCompletedPts, submittedAt, **retrospectiveReport** (TEXT, added V11 — cached JSON of `RetrospectiveReport`) |
@@ -457,6 +457,8 @@ sprint-planner/
 | GET | `/api/teams/{teamId}/developers` | TeamController | — | `List<DeveloperHttpDto>` | Yes |
 | POST | `/api/teams/{teamId}/developers` | TeamController | `AddDeveloperHttpRequest` | `DeveloperHttpDto` | Yes |
 | DELETE | `/api/teams/{teamId}/developers/{devId}` | TeamController | — | 204 No Content | Yes |
+| PUT | `/api/teams/{teamId}/developers/{devId}` | TeamController | `UpdateDeveloperRequest(name, role, capabilities)` | `DeveloperHttpDto` | Yes |
+| PUT | `/api/teams/{teamId}/developers/{devId}/trello-member` | TeamController | `LinkTrelloMemberRequest(trelloMemberId)` | `DeveloperHttpDto` | Yes |
 | GET | `/api/teams/{teamId}/memory` | TeamController | — | `TeamMemoryResponse` | Yes |
 | DELETE | `/api/teams/{teamId}/memory/profile` | TeamController | — | 200 OK | Yes |
 | GET | `/api/teams/{teamId}/carryover` | TeamController | — | `List<CarryoverTaskDto>` | Yes |
@@ -479,6 +481,7 @@ sprint-planner/
 | DELETE | `/api/sprints/{sprintId}` | SprintPlannerController | — | 204 No Content | Yes (owner, PLANNING status only) |
 | DELETE | `/api/sprints/cleanup` | SprintPlannerController | — | `String` (count deleted) | Yes (admin) |
 | POST | `/api/reviews` | ReviewController | `SprintReviewRequest` | `String` | Yes |
+| DELETE | `/api/admin/reset` | AdminController | — | `String` | Yes (admin) |
 
 ---
 
@@ -606,6 +609,8 @@ erDiagram
 **`user_story`** — A user story within a sprint, grouped by `epic_title`. `story_order` (added in V6) preserves display ordering via JPA `@OrderColumn`. `status` values: `PLANNED`, `DONE`, `NOT_DONE`.
 
 **`task`** — A concrete task within a user story. `assigned_dev_id` FK references `developer`. `role_tag` indicates required skill (BACKEND, FRONTEND, QA, DEVOPS). `task_order` (added in V6) preserves display ordering. `trello_card_id` is populated after Trello push. `assignment_reason` (V10, VARCHAR 500, nullable) — one-sentence explanation from the distribution AI for why this developer was assigned.
+
+**`sprint`** — A sprint within a team. `codebase_context` (V12, TEXT, nullable) — free-text codebase description provided by the PM during planning; persisted so the task guidance endpoint can tailor Gemini advice to the specific tech stack and codebase state.
 
 **`sprint_review`** — Outcome of a completed sprint. `goal_result` is `YES`, `PARTIALLY`, or `NO`. One review per sprint (enforced via `existsBySprintId` check in `SprintReviewService`). `retrospective_report` (V11, TEXT, nullable) — cached JSON serialization of `RetrospectiveReport`; populated on first call to `GET /{sprintId}/retrospective` to avoid regenerating the AI analysis.
 
@@ -800,6 +805,7 @@ Frontend: ReviewPage — "Push to Trello" button
 | V9 | `V9__add_team_memory.sql` | Creates `team_memory (team_id UUID PK FK, file_type VARCHAR(20) PK, content TEXT, updated_at TIMESTAMP)` — active memory store; `JpaMemoryAdapter` reads/writes this table |
 | V10 | `V10__add_task_assignment_reason.sql` | `ALTER TABLE task ADD COLUMN assignment_reason VARCHAR(500)` — AI explanation for developer assignment |
 | V11 | `V11__add_retrospective_cache.sql` | `ALTER TABLE sprint_review ADD COLUMN retrospective_report TEXT` — cached JSON for retrospective report |
+| V12 | `V12__add_codebase_context.sql` | `ALTER TABLE sprint ADD COLUMN codebase_context TEXT` — stores PM-provided codebase context for use in task guidance |
 
 ---
 
@@ -887,7 +893,7 @@ Frontend: ReviewPage — "Push to Trello" button
 |-------|-----------|
 | Backend | Spring Boot 3.5.14 / Java 21 |
 | Architecture | Hexagonal (ports-and-adapters) |
-| DB | PostgreSQL 5433 / Flyway V1–V11 |
+| DB | PostgreSQL 5433 / Flyway V1–V12 |
 | Auth | Stateless JWT (jjwt 0.12.6) + BCrypt |
 | AI | Google Gemini GenAI SDK (3 adapters: breakdown/estimation/distribution) + direct Gemini calls for guidance and retrospective |
 | Frontend | React 18 / TypeScript / Vite |
@@ -922,7 +928,7 @@ Frontend: ReviewPage — "Push to Trello" button
 | All Zustand stores | `frontend/src/store/` |
 | TypeScript type definitions | `frontend/src/types/` |
 | API call functions | `frontend/src/api/` |
-| DB schema ground truth | `src/main/resources/db/migration/` — V1 through V11 |
+| DB schema ground truth | `src/main/resources/db/migration/` — V1 through V12 |
 | Memory storage (runtime) | `team_memory` DB table — `JpaMemoryAdapter` reads/writes `(teamId, "profile")` and `(teamId, "history")` rows |
 | Confidence forecast component | `frontend/src/features/planning/ConfidenceForecast.tsx` |
 | Retrospective page | `frontend/src/features/sprint-close/RetrospectivePage.tsx` |
@@ -940,4 +946,4 @@ Frontend: ReviewPage — "Push to Trello" button
 - Task guidance is loaded lazily: the `💡` panel in `TaskCard` fires `POST .../guidance` only when opened, and caches the result for that task instance (no refetch on re-open).
 - Retrospective is generated once and cached in the DB. Calling `GET /retrospective` a second time returns the cached JSON — Gemini is not called again.
 - `SprintPlannerController` constructor order is sensitive (17 params). Do not reorder without updating every call site.
-- The `team_memory` table (V9) exists in the DB but is not used by any application code. Memory still goes through `MarkdownFileMemoryAdapter` and the filesystem.
+- `JpaMemoryAdapter` (`@Primary`) is the active memory adapter — reads/writes the `team_memory` DB table. `MarkdownFileMemoryAdapter` still exists as a non-primary fallback but receives no calls at runtime. Old `memory/` files on disk are stale and ignored.
