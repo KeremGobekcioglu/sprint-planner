@@ -9,6 +9,8 @@ import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.EstimationPort;
 import com.sprintplanner.infrastructure.config.GeminiConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,7 @@ import java.util.Map;
 @Primary
 public class GeminiEstimationAdapter implements EstimationPort {
 
+    private static final Logger logger = LoggerFactory.getLogger(GeminiEstimationAdapter.class);
     private static final int[] FIBONACCI = {1, 2, 3, 5, 8, 13};
 
     private final GeminiClientProvider gemini;
@@ -65,13 +68,30 @@ public class GeminiEstimationAdapter implements EstimationPort {
             sb.append("## Sprint History\n").append(sprintHistory).append("\n\n");
         }
 
-        sb.append("## Guidelines\n");
-        sb.append("- backend: 3–8 pts, frontend: 2–5 pts, qa: 1–3 pts, devops: 2–5 pts\n\n");
+        sb.append("## Estimation Approach\n");
+        sb.append("First, classify each task by size. Then convert to points.\n\n");
 
+        sb.append("Size classification:\n");
+        sb.append("XS — trivial: config change, add a field, fix a label, add logging → 1pt\n");
+        sb.append("S  — simple: new endpoint following existing pattern, basic UI component, unit tests → 2pts\n");
+        sb.append("M  — moderate: new feature with some coordination, simple SDK integration, scheduled job → 3pts\n");
+        sb.append("L  — complex: multi-endpoint feature, complex UI, external payment/search integration → 5pts\n");
+        sb.append("XL — very complex: reconciliation algorithm, real-time sync, data migration → 8pts\n\n");
+
+        sb.append("Classification rules:\n");
+        sb.append("- Read the task title and description carefully before classifying\n");
+        sb.append("- If the epic or task name contains 'Lite', 'Basic', 'Simple', 'MVP', 'Health Check': classify as XS or S\n");
+        sb.append("- If codebase context shows this functionality already partially exists: go one size smaller\n");
+        sb.append("- A mobile native screen (iOS/Android) is typically M or L, not XL\n");
+        sb.append("- Config, setup, and deploy tasks are XS or S unless they involve new infrastructure\n");
+        sb.append("- Most tasks in a well-scoped sprint should be S or M — not everything is L or XL\n\n");
+
+        sb.append("Variety check: before finalizing, ensure your estimates include a mix of sizes.\n");
+        sb.append("A sprint where every task is M(3pts) or L(5pts) means you did not read task descriptions carefully.\n\n");
         sb.append("## Output Rules\n");
-        sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");
-        sb.append("Each element: { \"id\": \"<task-uuid>\", \"points\": <fibonacci-number> }\n");
-
+        sb.append("Respond ONLY with a raw JSON array. No explanation outside the array, no markdown, no backticks.\n");
+        sb.append("For each task, first classify the size, then assign points.\n");
+        sb.append("Each element: { \"id\": \"<task-uuid>\", \"size\": \"<XS|S|M|L|XL>\", \"reasoning\": \"<one sentence why>\", \"points\": <fibonacci-number> }\n\n");
         return sb.toString();
     }
 
@@ -95,10 +115,14 @@ public class GeminiEstimationAdapter implements EstimationPort {
 
             Map<String, Integer> pointsById = new java.util.HashMap<>();
             for (JsonNode node : root) {
-                pointsById.put(
-                        node.path("id").asText(),
-                        toNearestFibonacci(node.path("points").asInt(2))
-                );
+                String taskId = node.path("id").asText();
+                pointsById.put(taskId, toNearestFibonacci(node.path("points").asInt(2)));
+                String size = node.path("size").asText("?");
+                String reasoning = node.path("reasoning").asText("");
+                logger.debug("[ESTIMATION] Task {}: {} ({}) → {}pts",
+                        taskId.length() > 8 ? taskId.substring(0, 8) : taskId,
+                        size, reasoning,
+                        pointsById.get(taskId));
             }
 
             for (UserStory story : stories) {
