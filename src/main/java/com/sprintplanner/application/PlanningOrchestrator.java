@@ -19,9 +19,12 @@ import com.sprintplanner.domain.port.out.ProgressPort;
 import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -105,10 +108,56 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 : Math.max(0.5, 1.0 - ((double) totalDaysOff / (devCount * sprintDays)));
             int totalCapacity = (int) (rawCapacity * 0.80 * daysOffFactor);
 
+            Map<UUID, List<String>> developerCapabilities = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    com.sprintplanner.domain.model.Developer::getId,
+                    developer -> developer.getCapabilities().isEmpty()
+                        ? CapabilityInferenceService.inferFromRole(developer.getRole())
+                        : developer.getCapabilities(),
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
+            Map<UUID, String> developerNames = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Developer::getId,
+                    Developer::getName,
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
+            push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
+            Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
+                developers,
+                team.getSprintLengthDays(),
+                request.daysOff() == null ? Map.of() : request.daysOff(),
+                effectiveSprintHistory,
+                request.teamId()
+            );
+            int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
+            push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
+            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), adjustedCapacity, developers.size());
+
+            // Build per-capability capacity budget for the breakdown prompt
+            Map<String, Integer> capacityByCapability = new LinkedHashMap<>();
+            for (Developer dev : developers) {
+                int devCapacity = capacityByDeveloper.getOrDefault(dev.getId(), 0);
+                for (String cap : developerCapabilities.getOrDefault(dev.getId(), List.of())) {
+                    capacityByCapability.merge(cap.toLowerCase(), devCapacity, Integer::sum);
+                }
+            }
+
+            // Find capabilities that have zero coverage (no developer has them)
+            Set<String> allKnownCapabilities = Set.of("backend", "frontend", "qa", "devops", "android", "ios");
+            Set<String> coveredCapabilities = capacityByCapability.keySet();
+            Set<String> uncoveredCapabilities = allKnownCapabilities.stream()
+                .filter(c -> !coveredCapabilities.contains(c))
+                .collect(Collectors.toSet());
+
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
             log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
-            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity));
+            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity, capacityByCapability, uncoveredCapabilities, request.codebaseContext()));
 
             // Inject carry-over tasks as a synthetic story before estimation
             List<CarryoverTaskDto> carryovers = request.carryoverTasks();
@@ -144,36 +193,6 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 s.getTasks().stream().mapToInt(t -> t.getStoryPoints()).sum()).sum();
             push(userId, "estimation", "Estimation done: " + totalPoints + " total story points.");
             log.info("[Planning] teamId={} — estimation done: {} total points", request.teamId(), totalPoints);
-
-            push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
-            Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
-                developers,
-                team.getSprintLengthDays(),
-                request.daysOff() == null ? Map.of() : request.daysOff(),
-                effectiveSprintHistory,
-                request.teamId()
-            );
-            int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
-            push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
-            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), adjustedCapacity, developers.size());
-
-            Map<UUID, List<String>> developerCapabilities = developers.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    com.sprintplanner.domain.model.Developer::getId,
-                    developer -> developer.getCapabilities().isEmpty()
-                        ? CapabilityInferenceService.inferFromRole(developer.getRole())
-                        : developer.getCapabilities(),
-                    (a, b) -> a,
-                    java.util.LinkedHashMap::new
-                ));
-
-            Map<UUID, String> developerNames = developers.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    Developer::getId,
-                    Developer::getName,
-                    (a, b) -> a,
-                    java.util.LinkedHashMap::new
-                ));
 
             push(userId, "distribution", "Assigning " + taskCount + " tasks to " + developers.size() + " developer(s)...");
             log.info("[Planning] teamId={} — distribution start", request.teamId());
