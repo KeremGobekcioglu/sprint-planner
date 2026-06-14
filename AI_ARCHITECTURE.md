@@ -43,9 +43,10 @@ All three are `@Primary`, so they are active by default over stub adapters.
 
 Configured model constants in `GeminiClientProvider`:
 
-- Breakdown: `gemini-3-flash-preview` (with fallback to `gemini-2.5-flash`)
+- Breakdown: `gemini-3.5-flash` (fallback chain `["gemini-3.5-flash", "gemini-2.5-flash"]`; retry uses `MODEL_BREAKDOWN_RETRY = "gemini-2.5-flash-lite"`)
 - Estimation: `gemini-2.5-flash-lite` (fallback `gemini-2.5-flash`)
 - Distribution: `gemini-2.5-flash` (fallback `gemini-2.5-flash-lite`)
+- Retrospective: `gemini-2.5-flash-lite` (same string as Estimation, but a separate constant so it can be tuned independently)
 
 ### Reliability pattern
 
@@ -87,7 +88,7 @@ flowchart LR
    - Output: task/story point estimates with size-classification framing (`XS/S/M/L/XL`) and reasoning.
 
 4. **Distribution phase**
-   - Input: estimated tasks + per-developer capacity + capabilities.
+   - Input: estimated tasks + per-developer capacity + capabilities + `developerNames` map (UUID→name).
    - Output: assignment decisions and `assignmentReason` text.
    - Uses LLM preference ranking + deterministic capability/capacity checks, then second-pass gap fill.
    - Cross-capability fallback is applied when no direct role coverage exists (for selected role types).
@@ -123,10 +124,13 @@ This creates a pseudo-RAG style context injection pattern, but from internal DB 
   - `riskFlags[]`
 - If JSON parse fails, raw model output is still returned as `hints` fallback.
 
-## Retrospective generation (`GET /api/sprints/{sprintId}/retrospective`)
+## Retrospective generation
 
-- `RetrospectiveService` computes metrics/patterns and asks Gemini for narrative commentary.
-- Result is cached in `sprint_review.retrospective_report` to avoid repeated AI calls.
+- **Triggered automatically on sprint close**: `SprintReviewService.submitReview()` registers a `TransactionSynchronization.afterCommit()` callback that calls `RetrospectiveService.generateReport()` in a new (`REQUIRES_NEW`) transaction and writes the JSON to `sprint_review.retrospective_report`.
+- **On-demand fallback** (`GET /api/sprints/{sprintId}/retrospective`): if the auto-generation failed at close time, the controller calls `RetrospectiveService.generateReport()` on demand and caches the result.
+- `RetrospectiveService` computes per-developer metrics, detects patterns, generates recommendations, and calls Gemini for narrative commentary (`MODEL_RETROSPECTIVE`).
+- Pre-loads the previous sprint's `DevCompletion` list once before processing to avoid N+1 queries.
+- Result is cached in `sprint_review.retrospective_report` (TEXT JSON) to avoid repeated AI calls.
 
 ---
 
@@ -153,7 +157,7 @@ This gives the system a partial degraded mode for resilience and local developme
 
 ## 9) Risks and Improvement Opportunities
 
-- Breakdown primary model identifier may be unavailable depending on Gemini release/support window.
+- Breakdown primary model is `gemini-3.5-flash` (updated from the previous `gemini-3-flash-preview`). Verify availability in your Gemini API tier; the fallback chain falls back to `gemini-2.5-flash` if the primary fails.
 - Progress reporting is polling-based and in-memory; long calls can degrade UX during backend restarts.
 - JSON parse robustness can be improved with stricter schemas or function-calling style outputs.
 - Centralized prompt versioning and evaluation harness would improve reproducibility.

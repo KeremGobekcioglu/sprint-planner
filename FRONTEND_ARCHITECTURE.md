@@ -101,7 +101,7 @@ Authentication guard reads `authStore.isAuthenticated` and redirects to `/login`
 ## Zustand stores
 
 - `authStore`: token, user identity, role, login/logout, persistence enabled
-- `planningStore`: selected team and current sprint IDs, persistence enabled
+- `planningStore`: `{ selectedTeamId, currentSprintId, confidence, setTeam(), setSprint(), setConfidence() }` — `confidence` holds the last `SprintConfidenceForecast` from planning; all fields persisted to localStorage
 - `reviewStore`: in-memory edit/defer/warning UI state (not persisted)
 
 ## React Query usage
@@ -116,11 +116,12 @@ Authentication guard reads `authStore.isAuthenticated` and redirects to `/login`
 
 ## Planning flow
 
-1. `PlanningPage` collects team goal, epics, days-off, previous-sprint context, optional carryover tasks, and optional `codebaseContext`.
+1. `PlanningPage` collects team goal, epics, days-off, previous-sprint context, optional carryover tasks, and optional `codebaseContext` (pre-filled from the most recent sprint's saved context via `getPlanningMode`).
 2. Epic input supports two entry modes via `EpicInput`: structured `Cards` editing and `Paste` parsing for multiple plain-text formats.
-3. `usePlanning` submits request and polls planning status.
-4. `ConfidenceForecast` renders forecast returned with the plan.
-5. Plan transitions user to review/dashboard flow.
+3. `usePlanning` submits request and polls planning status every 600 ms.
+4. Navigation is blocked while the AI pipeline is running; auto-releases after 90 s or on error.
+5. On success, an in-page result view is shown with plan stats (stories, tasks, points), pipeline log, and `ConfidenceForecast`. User then chooses "Review Plan →" or "Go to Dashboard" — no automatic redirect.
+6. `setConfidence()` is called on the `planningStore` so the forecast is available outside this page.
 
 ## Review flow
 
@@ -188,4 +189,6 @@ flowchart TD
 - Local persistence in auth/planning stores helps resume context across reloads.
 - Sprint ID normalization logic in `sprintApi.ts` improves robustness when URLs include extra text around UUIDs.
 - `DashboardPage` card/button layout has recent responsive tweaks to improve small-screen behavior in active sprint and team sections.
+- `PlanningPage` blocks React Router navigation and `beforeunload` while the AI pipeline is running to prevent accidental navigation. The block auto-releases after 90 s so the user is never permanently stuck on a hang.
+- `codebaseContext` on `PlanningPage` is pre-populated from `getPlanningMode`'s `lastCodebaseContext` field (the most recent sprint for this team that had one), so users don't have to re-enter it every sprint.
 

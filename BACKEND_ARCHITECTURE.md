@@ -117,11 +117,11 @@ web (controllers, HTTP DTOs)
 3. Saves `SprintReview` and `DevCompletion` records.
 4. Moves sprint to `COMPLETED` and updates sprint history memory.
 
-## Retrospective (`GET /api/sprints/{id}/retrospective`)
+## Retrospective (auto-generated on close + `GET /api/sprints/{id}/retrospective`)
 
-1. Controller checks cached report in `sprint_review.retrospective_report`.
-2. If missing, `RetrospectiveService` generates report and AI narrative.
-3. JSON is cached for subsequent fast reads.
+1. **Sprint close** (`POST /api/reviews`) triggers auto-generation: `SprintReviewService.submitReview()` registers an `afterCommit()` callback that calls `RetrospectiveService.generateReport()` in a separate `REQUIRES_NEW` transaction and caches the JSON to `sprint_review.retrospective_report`. Failure is non-fatal (logged as WARN).
+2. **On-demand fallback** (`GET /{id}/retrospective`): controller checks cache first; if empty (auto-gen failed), `RetrospectiveService` generates report and `SprintReviewService.cacheRetrospectiveReport()` writes it to the DB.
+3. Subsequent reads return the cached JSON immediately — Gemini is not called again.
 
 ---
 
