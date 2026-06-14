@@ -19,6 +19,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class SprintReviewService {
@@ -152,19 +154,28 @@ public class SprintReviewService {
         sprint.setStatus(Sprint.Status.COMPLETED);
         sprintRepository.save(sprint);
 
-        // Best-effort: generate and cache the retrospective report now so the first
-        // GET /retrospective call is instant. This may fail within the same transaction
-        // (Hibernate first-level cache hides the freshly saved review from the sprint
-        // association) — the endpoint falls back to on-demand generation in that case.
-        try {
-            RetrospectiveReport report = retrospectiveService.generateReport(sprintId);
-            String reportJson = objectMapper.writeValueAsString(report);
-            review.setRetrospectiveReport(reportJson);
-            sprintReviewJpaRepository.save(review);
-            logger.info("[RETROSPECTIVE] Generated and cached for sprint {}", sprintId);
-        } catch (Exception e) {
-            logger.warn("[RETROSPECTIVE] Failed to cache at close time, will generate on demand: {}", e.getMessage());
-        }
+        // Best-effort: generate and cache the retrospective report after the outer
+        // transaction successfully commits. Register an afterCommit callback so the
+        // generation runs in a separate transaction and cannot mark the outer one
+        // rollback-only.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    RetrospectiveReport report = retrospectiveService.generateReport(sprintId);
+                    String reportJson = objectMapper.writeValueAsString(report);
+                    sprintReviewJpaRepository.findBySprintId(sprintId).ifPresent(r -> {
+                        if (r.getRetrospectiveReport() == null || r.getRetrospectiveReport().isBlank()) {
+                            r.setRetrospectiveReport(reportJson);
+                            sprintReviewJpaRepository.save(r);
+                        }
+                    });
+                    logger.info("[RETROSPECTIVE] Generated and cached for sprint {}", sprintId);
+                } catch (Exception e) {
+                    logger.warn("[RETROSPECTIVE] Failed to cache at close time, will generate on demand: {}", e.getMessage());
+                }
+            }
+        });
 
         // Update sprint history memory for this team.
         // findByTeamIdWithReviews uses LEFT JOIN FETCH, but the sprint entity is already

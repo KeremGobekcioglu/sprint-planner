@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @Service
 public class RetrospectiveService {
@@ -42,7 +43,7 @@ public class RetrospectiveService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public RetrospectiveReport generateReport(UUID sprintId) {
         Sprint sprint = sprintRepository.findWithStoriesAndTasksById(sprintId)
             .orElseThrow(() -> new IllegalArgumentException("Sprint not found: " + sprintId));
@@ -54,13 +55,23 @@ public class RetrospectiveService {
 
         // 1. Build developer stats
         List<DevCompletion> completions = devCompletionRepository.findByReviewId(review.getId());
+
+        // Pre-load previous sprint completions once to avoid N+1 queries in computeTrend
+        List<Sprint> teamCompletedSprints = sprintRepository.findByTeamId(sprint.getTeamId())
+            .stream()
+            .filter(s -> s.getStatus() == Sprint.Status.COMPLETED && s.getSprintReview() != null)
+            .sorted(Comparator.comparing(Sprint::getPlannedAt))
+            .toList();
+        boolean hasEnoughHistory = teamCompletedSprints.size() >= 2;
+        List<DevCompletion> previousSprintCompletions = loadPreviousSprintCompletions(teamCompletedSprints);
+
         List<RetrospectiveReport.DeveloperStat> devStats = completions.stream()
             .map(dc -> {
                 String name = developerRepository.findById(dc.getDeveloperId())
                     .map(Developer::getName).orElse(dc.getDeveloperId().toString());
                 double rate = dc.getPlannedPts() == 0 ? 0 :
                     (double) dc.getCompletedPts() / dc.getPlannedPts();
-                String trend = computeTrend(dc.getDeveloperId(), sprint.getTeamId(), rate);
+                String trend = computeTrend(dc.getDeveloperId(), rate, previousSprintCompletions, hasEnoughHistory);
                 return new RetrospectiveReport.DeveloperStat(
                     name, dc.getPlannedPts(), dc.getCompletedPts(),
                     Math.round(rate * 100.0) / 100.0, trend
@@ -94,29 +105,21 @@ public class RetrospectiveService {
         );
     }
 
-    private String computeTrend(UUID developerId, UUID teamId, double currentRate) {
-        List<Sprint> previousSprints = sprintRepository.findByTeamId(teamId)
-            .stream()
-            .filter(s -> s.getStatus() == Sprint.Status.COMPLETED && s.getSprintReview() != null)
-            .sorted(Comparator.comparing(Sprint::getPlannedAt))
-            .toList();
+    private List<DevCompletion> loadPreviousSprintCompletions(List<Sprint> completedSprints) {
+        if (completedSprints.size() < 2) return List.of();
+        Sprint prevSprint = completedSprints.get(completedSprints.size() - 2);
+        return devCompletionRepository.findByReviewId(prevSprint.getSprintReview().getId());
+    }
 
-        if (previousSprints.size() < 2) return "insufficient data";
-
-        Sprint prevSprint = previousSprints.get(previousSprints.size() - 2);
-        if (prevSprint.getSprintReview() == null) return "insufficient data";
-
-        List<DevCompletion> prevCompletions = devCompletionRepository
-            .findByReviewId(prevSprint.getSprintReview().getId());
-
-        double prevRate = prevCompletions.stream()
+    private String computeTrend(UUID developerId, double currentRate,
+            List<DevCompletion> previousCompletions, boolean hasEnoughHistory) {
+        if (!hasEnoughHistory) return "insufficient data";
+        Double prevRate = previousCompletions.stream()
             .filter(dc -> dc.getDeveloperId().equals(developerId))
-            .mapToDouble(dc -> dc.getPlannedPts() == 0 ? 0 :
-                (double) dc.getCompletedPts() / dc.getPlannedPts())
+            .map(dc -> dc.getPlannedPts() == 0 ? 0.0 : (double) dc.getCompletedPts() / dc.getPlannedPts())
             .findFirst()
-            .orElse(-1);
-
-        if (prevRate < 0) return "new to team";
+            .orElse(null);
+        if (prevRate == null) return "new to team";
         if (currentRate > prevRate + 0.10) return "improving";
         if (currentRate < prevRate - 0.10) return "declining";
         return "stable";
@@ -218,9 +221,10 @@ public class RetrospectiveService {
         prompt.append("\nWrite a constructive, honest retrospective analysis. ");
         prompt.append("Focus on what the data tells us, not generic agile advice. ");
         prompt.append("Be specific about this team's performance. Keep it under 200 words.");
+        prompt.append("\nFormat your response as plain text paragraphs separated by a blank line (two newlines between paragraphs). No markdown, no bullet points, no headers.");
 
         try {
-            return gemini.generate(prompt.toString(), 0.4f, GeminiClientProvider.MODEL_ESTIMATION);
+            return gemini.generate(prompt.toString(), 0.4f, GeminiClientProvider.MODEL_RETROSPECTIVE);
         } catch (Exception e) {
             logger.warn("Failed to generate AI analysis for retrospective: {}", e.getMessage());
             return "AI analysis unavailable. See patterns and recommendations above.";
