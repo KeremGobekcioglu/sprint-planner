@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams, Link, useBlocker } from 'react-router-dom';
 import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode, getCarryoverTasks } from '../../api/sprintApi';
@@ -44,6 +44,7 @@ export function PlanningPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [codebaseContext, setCodebaseContext] = useState('');
   const [codebaseContextCollapsed, setCodebaseContextCollapsed] = useState(true);
+  const codebaseContextInitialized = useRef(false);
   const [epics, setEpics] = useState<Epic[]>([{ title: '', description: '' }]);
   const [epicError, setEpicError] = useState('');
   const [selectedCarryoverIds, setSelectedCarryoverIds] = useState<Set<string>>(new Set());
@@ -158,6 +159,17 @@ export function PlanningPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [planMutation.isPending, blockReleased]);
+
+  // Pre-fill codebase context from the most recent sprint that had one — only once on load
+  useEffect(() => {
+    if (codebaseContextInitialized.current) return;
+    const ctx = (planningModeQuery.data as any)?.lastCodebaseContext;
+    if (ctx && typeof ctx === 'string' && ctx.trim()) {
+      setCodebaseContext(ctx.trim());
+      setCodebaseContextCollapsed(false);
+      codebaseContextInitialized.current = true;
+    }
+  }, [planningModeQuery.data]);
 
   // Result view — shown after successful generation instead of auto-redirect
   if (planResult) {

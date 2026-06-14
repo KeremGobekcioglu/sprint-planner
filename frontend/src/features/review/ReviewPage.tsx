@@ -335,7 +335,7 @@ export function ReviewPage() {
         )}
 
         <p className="hidden text-xs text-slate-500 sm:block">Drag tasks between lanes to reassign developers.</p>
-        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
               key={developerId}
