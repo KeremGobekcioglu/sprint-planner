@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.EstimationPort;
@@ -36,10 +38,22 @@ public class GeminiEstimationAdapter implements EstimationPort {
     public List<UserStory> estimate(List<UserStory> userStories, String sprintHistoryMemory) {
         if (userStories == null || userStories.isEmpty()) return List.of();
 
-        // ONE call for all stories instead of one per story
         String prompt = buildBatchPrompt(userStories, sprintHistoryMemory);
-        String raw = gemini.generate(prompt, 0.2f, GeminiClientProvider.MODEL_ESTIMATION);
-        applyBatchEstimates(userStories, raw);
+        Schema schema = buildEstimationSchema();
+
+        // Fix 3: single retry before falling back to heuristics
+        boolean applied = tryApplyBatchEstimates(userStories,
+                gemini.generate(prompt, 0.2f, GeminiClientProvider.MODEL_ESTIMATION, schema));
+
+        if (!applied) {
+            logger.warn("[ESTIMATION] First attempt failed to parse, retrying with same prompt...");
+            boolean retryApplied = tryApplyBatchEstimates(userStories,
+                    gemini.generate(prompt, 0.2f, GeminiClientProvider.MODEL_ESTIMATION, schema));
+            if (!retryApplied) {
+                logger.warn("[ESTIMATION] Retry also failed, applying role-based fallback estimates");
+                userStories.forEach(this::applyFallbackEstimates);
+            }
+        }
 
         return userStories;
     }
@@ -86,8 +100,8 @@ public class GeminiEstimationAdapter implements EstimationPort {
         sb.append("- Config, setup, and deploy tasks are XS or S unless they involve new infrastructure\n");
         sb.append("- Most tasks in a well-scoped sprint should be S or M — not everything is L or XL\n\n");
 
-        sb.append("Variety check: before finalizing, ensure your estimates include a mix of sizes.\n");
-        sb.append("A sprint where every task is M(3pts) or L(5pts) means you did not read task descriptions carefully.\n\n");
+        // Fix 3: variety-check lines removed — each task is estimated independently on its own merits
+
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation outside the array, no markdown, no backticks.\n");
         sb.append("For each task, first classify the size, then assign points.\n");
@@ -96,11 +110,13 @@ public class GeminiEstimationAdapter implements EstimationPort {
     }
 
 
-
-
     // ── Apply estimates back to tasks ────────────────────────────────────────
 
-    private void applyBatchEstimates(List<UserStory> stories, String raw) {
+    /**
+     * Fix 3: returns true on successful parse+apply, false on any parse failure.
+     * The caller owns the retry/fallback decision.
+     */
+    private boolean tryApplyBatchEstimates(List<UserStory> stories, String raw) {
         try {
             String cleaned = raw.trim()
                     .replaceAll("(?s)```json\\s*", "")
@@ -109,8 +125,7 @@ public class GeminiEstimationAdapter implements EstimationPort {
 
             JsonNode root = objectMapper.readTree(cleaned);
             if (!root.isArray()) {
-                stories.forEach(this::applyFallbackEstimates);
-                return;
+                return false;
             }
 
             Map<String, Integer> pointsById = new java.util.HashMap<>();
@@ -129,15 +144,23 @@ public class GeminiEstimationAdapter implements EstimationPort {
                 if (story.getTasks() == null) continue;
                 int storyTotal = 0;
                 for (Task task : story.getTasks()) {
-                    int points = pointsById.getOrDefault(task.getId().toString(), 2);
+                    String taskIdStr = task.getId().toString();
+                    if (!pointsById.containsKey(taskIdStr)) {
+                        // Fix 3: warn explicitly rather than silently defaulting
+                        logger.warn("[ESTIMATION] Task ID {} ('{}') not found in model response — applying default of 2pts",
+                                taskIdStr, task.getTitle());
+                    }
+                    int points = pointsById.getOrDefault(taskIdStr, 2);
                     task.setStoryPoints(points);
                     storyTotal += points;
                 }
                 story.setStoryPoints(toNearestFibonacci(storyTotal));
             }
+            return true;
 
         } catch (Exception e) {
-            stories.forEach(this::applyFallbackEstimates);
+            logger.warn("[ESTIMATION] Failed to parse model response: {}", e.getMessage());
+            return false;
         }
     }
 
@@ -168,5 +191,27 @@ public class GeminiEstimationAdapter implements EstimationPort {
             }
         }
         return best;
+    }
+
+    // ── Structured output schema ──────────────────────────────────────────────
+
+    private Schema buildEstimationSchema() {
+        Schema itemSchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "id",        Schema.builder().type(Type.Known.STRING).build(),
+                        "size",      Schema.builder().type(Type.Known.STRING)
+                                             .enum_(List.of("XS", "S", "M", "L", "XL"))
+                                             .build(),
+                        "reasoning", Schema.builder().type(Type.Known.STRING).build(),
+                        "points",    Schema.builder().type(Type.Known.INTEGER).build()
+                ))
+                .required(List.of("id", "size", "reasoning", "points"))
+                .build();
+
+        return Schema.builder()
+                .type(Type.Known.ARRAY)
+                .items(itemSchema)
+                .build();
     }
 }
