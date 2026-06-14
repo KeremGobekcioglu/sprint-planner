@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
 import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
@@ -19,7 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -47,7 +49,8 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             int totalCapacity,
             Map<String, Integer> capacityByCapability,
             Set<String> uncoveredCapabilities,
-            String codebaseContext
+            String codebaseContext,
+            String developerSummary
     ) {
         if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
             logger.info("[BREAKDOWN] Team profile memory loaded ({} chars): ...{}",
@@ -65,16 +68,17 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         if (epics.isEmpty()) return List.of();
 
+        Schema schema = buildBreakdownSchema();
+
         // ONE call for all epics
-        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity, capacityByCapability, uncoveredCapabilities, codebaseContext);
-        String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
+        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity, capacityByCapability, uncoveredCapabilities, codebaseContext, developerSummary);
+        String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN, schema);
         List<UserStory> stories = parseResponse(raw, epics);
 
-        // Retry once if validation fails
+        // Retry once if validation fails — resend full original prompt with a schema-violation prefix
         if (!isValid(stories)) {
-            String retryPrompt = buildRetryPrompt(raw);
-// in breakdown() retry:
-            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY);
+            String retryPrompt = buildRetryPrompt(prompt, raw);
+            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY, schema);
             stories = parseResponse(retryRaw, epics);
         }
 
@@ -85,12 +89,23 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
     private String buildBatchPrompt(List<Epic> epics, PlanningRequest request,
                                     String teamProfile, String sprintHistory, int totalCapacity,
                                     Map<String, Integer> capacityByCapability, Set<String> uncoveredCapabilities,
-                                    String codebaseContext) {
+                                    String codebaseContext, String developerSummary) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("You are an expert agile sprint planner. Break down ALL epics below into user stories and tasks.\n\n");
 
         sb.append("## Domain\n").append(request.domain()).append("\n\n");
+
+        if (developerSummary != null && !developerSummary.isBlank()) {
+            sb.append("## Team Composition\n");
+            sb.append("These are the actual developers on this team and what they can work on:\n");
+            sb.append(developerSummary);
+            sb.append("\n");
+            sb.append("IMPORTANT: Each line above is ONE person. If one developer has multiple capabilities (e.g. ios, android, frontend),\n");
+            sb.append("do not create separate tasks for each capability — create ONE task for that person covering all relevant platforms.\n");
+            sb.append("Match task roleTags to what developers actually cover. Do not generate tasks for capabilities not listed above.\n\n");
+        }
+
         sb.append("## Sprint Goal\n").append(request.sprintGoal()).append("\n\n");
 
         sb.append("## Epics\n");
@@ -129,10 +144,10 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         sb.append("\n");
 
         sb.append("## Capacity Budget by Role\n");
-        sb.append("Generate exactly 1 story per epic covering its core requirement.\n");
-        sb.append("Use the budgets below as a guide for task sizing only — do not stop generating when a budget is consumed.\n");
-        sb.append("Every epic must produce at least 1 story. Tasks that exceed capacity will be surfaced for PM review.\n");
-        sb.append("Do not invent extra tasks beyond what the epic genuinely needs.\n");
+        // Fix 6: replaced contradictory capacity block with non-contradictory version
+        sb.append("Generate exactly 1 story per epic covering its core requirement. Every epic must be covered.\n");
+        sb.append("Use the role budgets below as sizing guidance only — over-budget tasks are surfaced to the PM, not dropped.\n");
+        sb.append("Generate only tasks each epic genuinely needs. Do not invent supporting tasks.\n");
         if (capacityByCapability != null && !capacityByCapability.isEmpty()) {
             for (Map.Entry<String, Integer> entry : capacityByCapability.entrySet()) {
                 sb.append("- ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" pts available\n");
@@ -226,10 +241,10 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
     private List<UserStory> parseResponse(String raw, List<Epic> epics) {
         List<UserStory> stories = new ArrayList<>();
 
-        // fallback epicTitle if LLM doesn't return one
+        // Fix 5: LinkedHashSet preserves input order for deterministic fallback epic title
         Set<String> epicTitles = epics.stream()
                 .map(Epic::title)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
         try {
             String cleaned = raw.trim()
@@ -243,6 +258,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             for (JsonNode storyNode : root) {
                 String epicTitle = storyNode.path("epicTitle").asText("");
                 if (epicTitle.isBlank() && !epicTitles.isEmpty()) {
+                    // First epic in input order (LinkedHashSet guarantees this)
                     epicTitle = epicTitles.iterator().next();
                 }
 
@@ -283,14 +299,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         return stories;
     }
 
-    private String buildRetryPrompt(String previousOutput) {
-        return """
-        Your previous response was invalid or incomplete.
-        Previous output: %s
-        
-        Fix it. Return a raw JSON array only — no markdown, no backticks.
-        Each story needs: epicTitle, title, tasks (2-4 items each with title, description, acceptanceCriterion, roleTag).
-        """.formatted(previousOutput);
+    /** Fix 4: re-sends the full original prompt so the retry has at least as much context as the first call. */
+    private String buildRetryPrompt(String originalPrompt, String previousOutput) {
+        return "Your previous response was invalid JSON or violated the schema. "
+                + "Return only valid JSON matching the required shape.\n\n"
+                + originalPrompt
+                + "\n\nPrevious (invalid) response for reference:\n"
+                + previousOutput;
     }
 
     // ── Validation ───────────────────────────────────────────────────────────
@@ -300,7 +315,8 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
 
         for (UserStory story : stories) {
             if (story.getTitle() == null || story.getTitle().isBlank()) return false;
-            if (story.getTasks() == null || story.getTasks().size() < 2) return false;
+            // Fix 1: a story with exactly 1 task is valid (single-role epics e.g. backend-only)
+            if (story.getTasks() == null || story.getTasks().size() < 1) return false;
 
             for (Task task : story.getTasks()) {
                 if (task.getTitle() == null || task.getTitle().isBlank()) return false;
@@ -310,5 +326,37 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         }
 
         return true;
+    }
+
+    // ── Structured output schema ──────────────────────────────────────────────
+
+    private Schema buildBreakdownSchema() {
+        Schema taskSchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "title",               Schema.builder().type(Type.Known.STRING).build(),
+                        "description",         Schema.builder().type(Type.Known.STRING).build(),
+                        "acceptanceCriterion", Schema.builder().type(Type.Known.STRING).build(),
+                        "roleTag",             Schema.builder().type(Type.Known.STRING)
+                                                       .enum_(List.of("backend", "frontend", "qa", "devops", "android", "ios"))
+                                                       .build()
+                ))
+                .required(List.of("title", "description", "acceptanceCriterion", "roleTag"))
+                .build();
+
+        Schema storySchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "epicTitle", Schema.builder().type(Type.Known.STRING).build(),
+                        "title",     Schema.builder().type(Type.Known.STRING).build(),
+                        "tasks",     Schema.builder().type(Type.Known.ARRAY).items(taskSchema).build()
+                ))
+                .required(List.of("epicTitle", "title", "tasks"))
+                .build();
+
+        return Schema.builder()
+                .type(Type.Known.ARRAY)
+                .items(storySchema)
+                .build();
     }
 }

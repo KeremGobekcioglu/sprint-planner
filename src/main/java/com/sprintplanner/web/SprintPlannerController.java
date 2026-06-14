@@ -41,6 +41,7 @@ import com.sprintplanner.web.dto.TaskGuidanceResponse;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -256,12 +257,20 @@ public class SprintPlannerController {
         String teamProfile = memoryReader.readTeamProfile(teamId);
         String sprintHistory = memoryReader.readSprintHistory(teamId);
 
-        Map<String, Object> body = Map.of(
-            "mode", completedSprints > 0 ? "CONTINUOUS" : "FRESH",
-            "completedSprints", completedSprints,
-            "hasTeamProfile", teamProfile != null && !teamProfile.isBlank(),
-            "hasSprintHistory", sprintHistory != null && !sprintHistory.isBlank()
-        );
+        String lastCodebaseContext = sprintRepository.findByTeamId(teamId).stream()
+            .filter(s -> s.getCodebaseContext() != null && !s.getCodebaseContext().isBlank())
+            .max(Comparator.comparing(Sprint::getPlannedAt))
+            .map(Sprint::getCodebaseContext)
+            .orElse(null);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("mode", completedSprints > 0 ? "CONTINUOUS" : "FRESH");
+        body.put("completedSprints", completedSprints);
+        body.put("hasTeamProfile", teamProfile != null && !teamProfile.isBlank());
+        body.put("hasSprintHistory", sprintHistory != null && !sprintHistory.isBlank());
+        if (lastCodebaseContext != null) {
+            body.put("lastCodebaseContext", lastCodebaseContext);
+        }
 
         return ResponseEntity.ok(body);
     }

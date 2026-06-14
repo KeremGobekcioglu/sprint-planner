@@ -19,7 +19,7 @@ public class StubBreakdownAdapter implements BreakdownPort {
 
     @Override
     public List<UserStory> breakdown(PlanningRequest request, String teamProfileMemory, String sprintHistoryMemory, int totalCapacity,
-            Map<String, Integer> capacityByCapability, Set<String> uncoveredCapabilities, String codebaseContext) {
+            Map<String, Integer> capacityByCapability, Set<String> uncoveredCapabilities, String codebaseContext, String developerSummary) {
         List<UserStory> stories = new ArrayList<>();
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
 

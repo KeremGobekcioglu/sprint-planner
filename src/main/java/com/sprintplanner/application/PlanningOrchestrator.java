@@ -154,10 +154,22 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 .filter(c -> !coveredCapabilities.contains(c))
                 .collect(Collectors.toSet());
 
+            StringBuilder devSummary = new StringBuilder();
+            for (Developer dev : developers) {
+                List<String> caps = dev.getCapabilities();
+                if (caps != null && !caps.isEmpty()) {
+                    devSummary.append("- ").append(dev.getName())
+                        .append(": ").append(String.join(", ", caps))
+                        .append(" (").append(capacityByDeveloper.getOrDefault(dev.getId(), 0)).append("pts)")
+                        .append("\n");
+                }
+            }
+            String developerSummary = devSummary.toString();
+
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
             log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
-            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity, capacityByCapability, uncoveredCapabilities, request.codebaseContext()));
+            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity, capacityByCapability, uncoveredCapabilities, request.codebaseContext(), developerSummary));
 
             // Inject carry-over tasks as a synthetic story before estimation
             List<CarryoverTaskDto> carryovers = request.carryoverTasks();

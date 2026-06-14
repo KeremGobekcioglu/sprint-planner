@@ -18,6 +18,7 @@ public interface BreakdownPort {
         int totalCapacity,
         Map<String, Integer> capacityByCapability,
         Set<String> uncoveredCapabilities,
-        String codebaseContext
+        String codebaseContext,
+        String developerSummary
     );
 }
