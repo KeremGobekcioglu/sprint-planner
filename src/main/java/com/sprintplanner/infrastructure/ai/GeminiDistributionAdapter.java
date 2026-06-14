@@ -2,6 +2,8 @@ package com.sprintplanner.infrastructure.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
 import com.sprintplanner.domain.dto.SprintPlan;
 import com.sprintplanner.domain.dto.SprintPlanMapper;
 import com.sprintplanner.domain.model.Task;
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 public class GeminiDistributionAdapter implements DistributionPort {
 
     private static final Logger logger = LoggerFactory.getLogger(GeminiDistributionAdapter.class);
+    private static final int SOLE_CAPABILITY_OVERFLOW_BUFFER_PTS = 2;
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
@@ -77,7 +80,8 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 developerNames, teamProfileMemory, sprintHistoryMemory
         );
 
-        String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION);
+        Schema schema = buildDistributionSchema();
+        String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION, schema);
 
         Map<UUID, Integer> remaining = new LinkedHashMap<>(capacityByDeveloper);
 
@@ -238,15 +242,19 @@ public class GeminiDistributionAdapter implements DistributionPort {
         // Parse LLM preference rankings
         Map<String, List<UUID>> preferencesByTaskId = parseLlmPreferences(raw, remaining.keySet());
 
-        // Sort tasks by story points descending — assign hardest tasks first
+        // Sort by capability exclusivity first (rarest capability → fewest devs), then by points
         List<Task> allTasks = new ArrayList<>(taskById.values());
-        allTasks.sort(Comparator.comparingInt(Task::getStoryPoints).reversed());
+        allTasks.sort(Comparator
+            .comparingInt((Task t) -> countDevelopersWithCapability(
+                normalizeRole(t.getRoleTag()), developerCapabilities))  // ascending — rarest first
+            .thenComparingInt(Task::getStoryPoints).reversed()          // then heaviest first
+        );
 
         for (Task task : allTasks) {
             String taskIdStr = task.getId().toString();
             List<UUID> preferredDevs = preferencesByTaskId.getOrDefault(taskIdStr, List.of());
 
-            UUID assigned = findBestDeveloper(task, preferredDevs, remaining, developerCapabilities);
+            UUID assigned = findBestDeveloper(task, preferredDevs, remaining, developerCapabilities, allTasks);
 
             if (assigned != null) {
                 task.setAssignedDevId(assigned);
@@ -262,11 +270,15 @@ public class GeminiDistributionAdapter implements DistributionPort {
         // Second pass: fill remaining capacity gaps with smallest unassigned tasks first
         List<Task> stillUnassigned = new ArrayList<>();
         List<Task> secondPassTasks = new ArrayList<>(unassignedTasks);
-        secondPassTasks.sort(Comparator.comparingInt(Task::getStoryPoints)); // ascending — smallest first
+        secondPassTasks.sort(Comparator
+            .comparingInt((Task t) -> countDevelopersWithCapability(
+                normalizeRole(t.getRoleTag()), developerCapabilities))  // ascending — rarest first
+            .thenComparingInt(Task::getStoryPoints).reversed()          // then heaviest first
+        );
 
         for (Task task : secondPassTasks) {
             List<UUID> prefs = preferencesByTaskId.getOrDefault(task.getId().toString(), List.of());
-            UUID assigned = findBestDeveloper(task, prefs, remaining, developerCapabilities);
+            UUID assigned = findBestDeveloper(task, prefs, remaining, developerCapabilities, allTasks);
             if (assigned != null) {
                 task.setAssignedDevId(assigned);
                 remaining.merge(assigned, -task.getStoryPoints(), Integer::sum);
@@ -312,14 +324,17 @@ public class GeminiDistributionAdapter implements DistributionPort {
             Task task,
             List<UUID> preferredDevs,
             Map<UUID, Integer> remaining,
-            Map<UUID, List<String>> developerCapabilities) {
+            Map<UUID, List<String>> developerCapabilities,
+            List<Task> allTasks) {
 
         String roleTag = normalizeRole(task.getRoleTag());
         int needed = Math.max(1, task.getStoryPoints());
+        Set<UUID> protectedDevs = computeProtectedDevelopers(roleTag, allTasks, developerCapabilities);
         UUID assigned = null;
 
         // Step 1: Try preferred developers in LLM-ranked order, capability + capacity check
         for (UUID devId : preferredDevs) {
+            if (protectedDevs.contains(devId)) continue; // skip — has unmet sole-capability tasks
             List<String> caps = developerCapabilities.getOrDefault(devId, List.of());
             boolean hasCapability = caps.stream().anyMatch(c -> normalizeRole(c).equals(roleTag));
             int cap = remaining.getOrDefault(devId, 0);
@@ -334,12 +349,58 @@ public class GeminiDistributionAdapter implements DistributionPort {
             int bestRemaining = Integer.MIN_VALUE;
             for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
                 UUID devId = entry.getKey();
+                if (protectedDevs.contains(devId)) continue; // skip — has unmet sole-capability tasks
                 boolean hasCapability = entry.getValue().stream()
                     .anyMatch(c -> normalizeRole(c).equals(roleTag));
                 int cap = remaining.getOrDefault(devId, 0);
                 if (hasCapability && cap >= needed && cap > bestRemaining) {
                     assigned = devId;
                     bestRemaining = cap;
+                }
+            }
+        }
+
+        // Step 2b: Assign over capacity to best available capable developer
+        if (assigned == null) {
+            int bestRemaining = Integer.MIN_VALUE;
+            for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
+                UUID devId = entry.getKey();
+                boolean hasCapability = entry.getValue().stream()
+                    .anyMatch(c -> normalizeRole(c).equals(roleTag));
+                int cap = remaining.getOrDefault(devId, 0);
+                if (hasCapability && cap > 0 && cap > bestRemaining) {
+                    assigned = devId;
+                    bestRemaining = cap;
+                }
+            }
+            if (assigned != null) {
+                logger.info("[DISTRIBUTION] Over-capacity assignment: {} task assigned to best available {} developer — PM will see warning",
+                    roleTag, roleTag);
+            }
+        }
+
+        // Step 2c: Sole-capability overflow — allow sole holder to exceed capacity
+        // by up to SOLE_CAPABILITY_OVERFLOW_BUFFER_PTS rather than misassigning
+        if (assigned == null) {
+            boolean isSoleCapability = developerCapabilities.values().stream()
+                .filter(caps -> caps.stream()
+                    .anyMatch(c -> normalizeRole(c).equals(roleTag)))
+                .count() == 1;
+
+            if (isSoleCapability) {
+                for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
+                    UUID devId = entry.getKey();
+                    boolean hasCapability = entry.getValue().stream()
+                        .anyMatch(c -> normalizeRole(c).equals(roleTag));
+                    int cap = remaining.getOrDefault(devId, 0);
+                    // Allow assignment if over-capacity by no more than the buffer
+                    if (hasCapability && cap >= -SOLE_CAPABILITY_OVERFLOW_BUFFER_PTS) {
+                        assigned = devId;
+                        logger.info("[DISTRIBUTION] Sole-capability overflow: {} task assigned to sole {} " +
+                            "developer {}pts over capacity — PM will see warning",
+                            roleTag, roleTag, Math.max(0, -cap + needed));
+                        break;
+                    }
                 }
             }
         }
@@ -371,13 +432,6 @@ public class GeminiDistributionAdapter implements DistributionPort {
             int needed,
             Map<UUID, Integer> remaining,
             Map<UUID, List<String>> developerCapabilities) {
-
-        // Check if ANY developer in the team has this capability
-        boolean anyoneHasCapability = developerCapabilities.values().stream()
-            .anyMatch(caps -> caps.stream().anyMatch(c -> normalizeRole(c).equals(roleTag)));
-
-        // If someone has the capability but is over capacity, task is genuinely unassignable
-        if (anyoneHasCapability) return null;
 
         // No one has the capability — apply cross-role fallback rules
         List<String> fallbackCapabilities = switch (roleTag) {
@@ -450,10 +504,84 @@ public class GeminiDistributionAdapter implements DistributionPort {
         return "No developer with " + task.getRoleTag() + " capability on this team — assign manually";
     }
 
+    private Set<UUID> computeProtectedDevelopers(
+            String currentRoleTag,
+            List<Task> allRemainingTasks,
+            Map<UUID, List<String>> developerCapabilities) {
+
+        Set<UUID> protected_ = new HashSet<>();
+
+        // Find capabilities covered by exactly one developer
+        Map<String, UUID> soleDeveloperByCapability = new HashMap<>();
+        for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
+            for (String cap : entry.getValue()) {
+                String normalized = normalizeRole(cap);
+                if (soleDeveloperByCapability.containsKey(normalized)) {
+                    // More than one developer has this capability — not sole
+                    soleDeveloperByCapability.remove(normalized);
+                } else {
+                    soleDeveloperByCapability.put(normalized, entry.getKey());
+                }
+            }
+        }
+
+        // For each sole-capability developer, check if their sole capability
+        // still has unassigned tasks remaining
+        for (Map.Entry<String, UUID> entry : soleDeveloperByCapability.entrySet()) {
+            String soleCapability = entry.getKey();
+            UUID soleDev = entry.getValue();
+
+            // Don't protect if current task IS their sole capability
+            if (soleCapability.equals(currentRoleTag)) continue;
+
+            // Check if any unassigned tasks still need this sole capability
+            boolean hasUnmetTasks = allRemainingTasks.stream()
+                .anyMatch(t -> normalizeRole(t.getRoleTag()).equals(soleCapability)
+                    && t.getAssignedDevId() == null);
+
+            if (hasUnmetTasks) {
+                protected_.add(soleDev);
+            }
+        }
+
+        return protected_;
+    }
+
+    private int countDevelopersWithCapability(
+            String roleTag,
+            Map<UUID, List<String>> developerCapabilities) {
+        if (developerCapabilities == null) return 0;
+        return (int) developerCapabilities.values().stream()
+            .filter(caps -> caps.stream()
+                .anyMatch(c -> normalizeRole(c).equals(roleTag)))
+            .count();
+    }
+
     private String normalizeRole(String role) {
         if (role == null) {
             return "";
         }
         return role.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    // ── Structured output schema ──────────────────────────────────────────────
+
+    private Schema buildDistributionSchema() {
+        Schema itemSchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "taskId",           Schema.builder().type(Type.Known.STRING).build(),
+                        "preferredDevOrder", Schema.builder()
+                                                    .type(Type.Known.ARRAY)
+                                                    .items(Schema.builder().type(Type.Known.STRING).build())
+                                                    .build()
+                ))
+                .required(List.of("taskId", "preferredDevOrder"))
+                .build();
+
+        return Schema.builder()
+                .type(Type.Known.ARRAY)
+                .items(itemSchema)
+                .build();
     }
 }
