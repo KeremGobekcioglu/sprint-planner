@@ -1,6 +1,8 @@
 import api from './axios';
-import { getDevelopers } from './teamApi';
-import type { PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
+import { getDevelopers, getTeams } from './teamApi';
+import { getSampleEpicsForTeam, getSampleSprintGoal, SAMPLE_EPICS_PAYFLOW, SAMPLE_EPICS_SHOPHUB } from './sampleData';
+import type { CarryoverTask, PlanningRequest, SprintPlan, SprintPlanWithId } from '../types/planning';
+import type { DashboardResponse } from '../types/dashboard';
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
@@ -73,7 +75,7 @@ async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): 
         title: `${epic.title} - ${taskIndex === 0 ? 'Implementation' : taskIndex === 1 ? 'Validation' : `Follow-up ${taskIndex}`}`,
         description: epic.description,
         acceptanceCriterion: `Complete ${epic.title.toLowerCase()} work for ${request.sprintGoal}`,
-        roleTag: developer?.role ?? 'backend',
+        roleTag: developer?.capabilities?.[0] ?? 'backend',
         storyPoints,
         status: taskIndex === 0 ? 'TODO' : 'READY',
         trelloCardId: `${request.teamId}-${epicIndex + 1}-${taskIndex + 1}`,
@@ -95,6 +97,7 @@ async function buildMockSprintPlan(request: PlanningRequest, sprintId: string): 
     teamId: request.teamId,
     sprintGoal: request.sprintGoal,
     userStories,
+    unassignedTasks: [],
   };
 
   persistSprintPlan(plan, sprintId);
@@ -195,11 +198,8 @@ export const approvePlan = (sprintId: string) => {
   return api.post(`/api/sprints/${canonicalSprintId}/approve`).then((response) => response.data);
 };
 
-export const pushPlanToTrello = async (sprintId: string) => {
-  return Promise.resolve({
-    sprintId,
-    message: 'Done - mocked Trello push completed.',
-  });
+export const pushPlanToTrello = async (sprintId: string): Promise<void> => {
+  await api.post(`/api/sprints/${normalizeSprintId(sprintId)}/trello-push`);
 };
 
 export interface MockPlanningDefaults {
@@ -233,3 +233,159 @@ export function getMockPlanningDefaults(teamId: string): Promise<MockPlanningDef
 
   return Promise.reject(new Error('Mock defaults not available in real API mode'));
 }
+
+/**
+ * Load sample epics for a team for rapid testing.
+ * Returns pre-configured epics matching the team's domain (Fintech or E-Commerce).
+ */
+export interface ActiveSprintResponse {
+  sprintId: string;
+  status: string;
+}
+
+export const getActiveSprint = (): Promise<ActiveSprintResponse | null> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve(null);
+  }
+  return api
+    .get<ActiveSprintResponse>('/api/sprints/active')
+    .then((r) => (r.status === 204 || !r.data ? null : r.data))
+    .catch(() => null);
+};
+
+export const getDashboardData = (): Promise<DashboardResponse> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve({ activeSprints: [], teams: [], recentSprints: [] });
+  }
+  return api.get<DashboardResponse>('/api/dashboard').then((r) => r.data);
+};
+
+export const getPlanningMode = async (teamId: string) => {
+  if (!USE_REAL_API) {
+    // Mock: return FRESH if no completed sprints in mock data, else CONTINUOUS
+    return { mode: 'FRESH', completedSprints: 0, hasTeamProfile: false, hasSprintHistory: false } as const;
+  }
+  const response = await api.get(`/api/sprints/teams/${teamId}/planning-mode`);
+  return response.data;
+};
+
+export interface PlanningStep {
+  phase: string;
+  message: string;
+  at: string;
+  done: boolean;
+  error: boolean;
+}
+
+export const getPlanningStatus = (): Promise<PlanningStep[]> => {
+  if (!USE_REAL_API) return Promise.resolve([]);
+  return api.get<PlanningStep[]>('/api/sprints/plan/status').then((r) => r.data ?? []);
+};
+
+export interface SprintReviewSummary {
+  reviewId: string;
+  goalResult: string;
+  blockerNote?: string;
+  totalPlannedPts: number;
+  totalCompletedPts: number;
+  submittedAt: string;
+}
+
+export const getSprintReview = (sprintId: string): Promise<SprintReviewSummary | null> => {
+  if (!USE_REAL_API) return Promise.resolve(null);
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  return api
+    .get<SprintReviewSummary>(`/api/sprints/${canonicalSprintId}/review`)
+    .then((r) => r.data)
+    .catch((err) => {
+      if (err?.response?.status === 404) return null;
+      return null;
+    });
+};
+
+export const deleteSprint = (sprintId: string): Promise<void> => {
+  if (!USE_REAL_API) {
+    return Promise.resolve();
+  }
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  return api.delete(`/api/sprints/${canonicalSprintId}`).then(() => undefined);
+};
+
+export const getCarryoverTasks = async (teamId: string): Promise<CarryoverTask[]> => {
+  if (!USE_REAL_API) return [];
+  const response = await api.get(`/api/teams/${teamId}/carryover`);
+  return response.data;
+};
+
+export const getTaskGuidance = async (sprintId: string, taskId: string) => {
+  const response = await api.post(`/api/sprints/${normalizeSprintId(sprintId)}/tasks/${taskId}/guidance`);
+  return response.data as { hints: string; suggestedApproach: string; riskFlags: string[] };
+};
+
+export interface RetrospectiveReport {
+  sprintId: string;
+  sprintGoal: string;
+  goalResult: 'YES' | 'PARTIALLY' | 'NO';
+  plannedPoints: number;
+  completedPoints: number;
+  completionRate: number;
+  developerStats: {
+    developerName: string;
+    plannedPts: number;
+    completedPts: number;
+    completionRate: number;
+    trend: string;
+  }[];
+  patterns: string[];
+  recommendations: string[];
+  aiAnalysis: string;
+}
+
+export const getRetrospectiveReport = async (sprintId: string): Promise<RetrospectiveReport> => {
+  const response = await api.get(`/api/sprints/${normalizeSprintId(sprintId)}/retrospective`);
+  return response.data as RetrospectiveReport;
+};
+
+export async function getSampleEpicsForPlanning(
+  teamId: string,
+): Promise<{
+  epicsText: string;
+  sprintGoal: string;
+  daysOff: Record<string, number>;
+}> {
+  // Try to detect the team's domain and return domain-appropriate sample epics.
+  // If the team is one of the explicit sample teams we still return their dedicated epics.
+  const teams = await getTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  let epics = getSampleEpicsForTeam(teamId);
+  if ((!epics || epics.length === 0) && team) {
+    if (team.domain === 'FINTECH') {
+      epics = SAMPLE_EPICS_PAYFLOW;
+    } else if (team.domain === 'E_COMMERCE') {
+      epics = SAMPLE_EPICS_SHOPHUB;
+    }
+  }
+
+  const sprintGoal = getSampleSprintGoal(teamId) || (team?.domain === 'FINTECH'
+    ? 'Deliver core fintech capabilities this sprint'
+    : team?.domain === 'E_COMMERCE'
+    ? 'Ship e-commerce improvements and reduce friction'
+    : 'Complete planned features on schedule');
+
+  const developers = await getDevelopers(teamId);
+
+  const epicsText = epics.map((epic) => `${epic.title} | ${epic.description}`).join('\n');
+
+  const daysOff: Record<string, number> = {};
+  developers.forEach((dev) => {
+    daysOff[dev.id] = 0; // No days off for sample data
+  });
+
+  return {
+    epicsText,
+    sprintGoal,
+    daysOff,
+  };
+}
+

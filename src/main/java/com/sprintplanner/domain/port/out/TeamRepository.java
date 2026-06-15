@@ -15,4 +15,6 @@ public interface TeamRepository {
     Optional<Team> findById(UUID teamId);
 
     List<Team> findAll();
+
+    List<Team> findByOwnerId(UUID ownerId);
 }

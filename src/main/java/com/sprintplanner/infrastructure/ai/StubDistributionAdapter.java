@@ -5,11 +5,9 @@ import com.sprintplanner.domain.dto.SprintPlanMapper;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.DistributionPort;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -24,6 +22,8 @@ public class StubDistributionAdapter implements DistributionPort {
         String sprintGoal,
         List<UserStory> estimatedUserStories,
         Map<UUID, Integer> capacityByDeveloper,
+        Map<UUID, List<String>> developerCapabilities,
+        Map<UUID, String> developerNames,
         String teamProfileMemory,
         String sprintHistoryMemory
     ) {
@@ -42,7 +42,7 @@ public class StubDistributionAdapter implements DistributionPort {
         int pointer = 0;
 
         for (UserStory story : userStories) {
-            Set<Task> tasks = story.getTasks() == null ? Set.of() : story.getTasks();
+            List<Task> tasks = story.getTasks() == null ? List.of() : story.getTasks();
             for (Task task : tasks) {
                 UUID selectedDev = selectDeveloper(orderedDevelopers, remaining, task.getStoryPoints(), pointer);
                 task.setAssignedDevId(selectedDev);
@@ -63,7 +63,10 @@ public class StubDistributionAdapter implements DistributionPort {
             sprintGoal,
             userStories.stream()
                 .map(SprintPlanMapper::toDto)
-                .toList()
+                .toList(),
+            List.of(),
+            null,
+            null
         );
     }
 

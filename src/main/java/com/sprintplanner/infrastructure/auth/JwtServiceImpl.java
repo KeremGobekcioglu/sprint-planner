@@ -27,15 +27,24 @@ public class JwtServiceImpl implements JwtService {
 
     @Override
     public String generateToken(UUID userId) {
+        return generateToken(userId, null);
+    }
+
+    @Override
+    public String generateToken(UUID userId, String role) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtConfig.getExpirationMs());
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
             .subject(userId.toString())
             .issuedAt(now)
-            .expiration(expiryDate)
-            .signWith(secretKey)
-            .compact();
+            .expiration(expiryDate);
+
+        if (role != null && !role.isBlank()) {
+            builder.claim("role", role);
+        }
+
+        return builder.signWith(secretKey).compact();
     }
 
     @Override
@@ -59,6 +68,16 @@ public class JwtServiceImpl implements JwtService {
             .parseSignedClaims(token)
             .getPayload();
         return UUID.fromString(claims.getSubject());
+    }
+
+    @Override
+    public String extractRole(String token) {
+        Claims claims = Jwts.parser()
+            .verifyWith(secretKey)
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
+        return claims.get("role", String.class);
     }
 }
 

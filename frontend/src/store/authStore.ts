@@ -5,8 +5,11 @@ export interface AuthStore {
   token: string | null;
   userId: string | null;
   email: string | null;
+  name: string | null;
+  role: 'ADMIN' | 'USER' | null;
   isAuthenticated: boolean;
-  login: (token: string, userId: string, email: string) => void;
+  isAdmin: boolean;
+  login: (token: string, userId: string, email: string, name: string, role: string) => void;
   logout: () => void;
 }
 
@@ -16,20 +19,29 @@ export const useAuthStore = create<AuthStore>()(
       token: null,
       userId: null,
       email: null,
+      name: null,
+      role: null,
       isAuthenticated: false,
-      login: (token: string, userId: string, email: string) =>
+      isAdmin: false,
+      login: (token: string, userId: string, email: string, name: string, role: string) =>
         set({
           token,
           userId,
           email,
+          name,
+          role: role === 'ADMIN' ? 'ADMIN' : 'USER',
           isAuthenticated: true,
+          isAdmin: role === 'ADMIN',
         }),
       logout: () =>
         set({
           token: null,
           userId: null,
           email: null,
+          name: null,
+          role: null,
           isAuthenticated: false,
+          isAdmin: false,
         }),
     }),
     {

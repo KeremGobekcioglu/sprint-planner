@@ -1,5 +1,6 @@
 import api from './axios';
 import type { Developer, Team } from '../types/team';
+import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from './sampleData';
 
 export interface TeamCreateRequest {
   name: string;
@@ -11,6 +12,7 @@ export interface TeamCreateRequest {
 export interface DeveloperCreateRequest {
   name: string;
   role: Developer['role'];
+  capabilities: Developer['capabilities'];
   baseVelocity: number;
 }
 
@@ -55,25 +57,25 @@ const seededTeams: Team[] = [
 
 const seededDevelopers: Developer[] = [
   // Team Atlas (E-Commerce)
-  { id: 'dev-atlas-1', teamId: 'team-atlas', name: 'Ava Chen', role: 'backend', baseVelocity: 8 },
-  { id: 'dev-atlas-2', teamId: 'team-atlas', name: 'Marco Silva', role: 'frontend', baseVelocity: 5 },
-  { id: 'dev-atlas-3', teamId: 'team-atlas', name: 'Priya Nair', role: 'qa', baseVelocity: 3 },
-  { id: 'dev-atlas-4', teamId: 'team-atlas', name: 'Liam O’Connor', role: 'backend', baseVelocity: 7 },
+  { id: 'dev-atlas-1', teamId: 'team-atlas', name: 'Ava Chen', role: 'Senior Backend', capabilities: ['backend'], baseVelocity: 8 },
+  { id: 'dev-atlas-2', teamId: 'team-atlas', name: 'Marco Silva', role: 'Frontend Engineer', capabilities: ['frontend'], baseVelocity: 5 },
+  { id: 'dev-atlas-3', teamId: 'team-atlas', name: 'Priya Nair', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 3 },
+  { id: 'dev-atlas-4', teamId: 'team-atlas', name: 'Liam O’Connor', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 7 },
 
   // Team Orbit (Fintech)
-  { id: 'dev-orbit-1', teamId: 'team-orbit', name: 'Jordan Reed', role: 'backend', baseVelocity: 7 },
-  { id: 'dev-orbit-2', teamId: 'team-orbit', name: 'Mina Hassan', role: 'devops', baseVelocity: 6 },
-  { id: 'dev-orbit-3', teamId: 'team-orbit', name: 'Satoshi Nakamoto', role: 'backend', baseVelocity: 13 },
+  { id: 'dev-orbit-1', teamId: 'team-orbit', name: 'Jordan Reed', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 7 },
+  { id: 'dev-orbit-2', teamId: 'team-orbit', name: 'Mina Hassan', role: 'DevOps', capabilities: ['devops'], baseVelocity: 6 },
+  { id: 'dev-orbit-3', teamId: 'team-orbit', name: 'Satoshi Nakamoto', role: 'Senior Backend', capabilities: ['backend'], baseVelocity: 13 },
 
   // Team Pulse (Healthcare)
-  { id: 'dev-pulse-1', teamId: 'team-pulse', name: 'Elena Rodriguez', role: 'frontend', baseVelocity: 6 },
-  { id: 'dev-pulse-2', teamId: 'team-pulse', name: 'Kofi Mensah', role: 'backend', baseVelocity: 8 },
-  { id: 'dev-pulse-3', teamId: 'team-pulse', name: 'Sarah Jenkins', role: 'qa', baseVelocity: 5 },
+  { id: 'dev-pulse-1', teamId: 'team-pulse', name: 'Elena Rodriguez', role: 'Frontend Engineer', capabilities: ['frontend'], baseVelocity: 6 },
+  { id: 'dev-pulse-2', teamId: 'team-pulse', name: 'Kofi Mensah', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 8 },
+  { id: 'dev-pulse-3', teamId: 'team-pulse', name: 'Sarah Jenkins', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 5 },
 
   // Team Shield (Security)
-  { id: 'dev-shield-1', teamId: 'team-shield', name: 'Alex Volkov', role: 'backend', baseVelocity: 9 },
-  { id: 'dev-shield-2', teamId: 'team-shield', name: 'Dana Scully', role: 'qa', baseVelocity: 4 },
-  { id: 'dev-shield-3', teamId: 'team-shield', name: 'Fox Mulder', role: 'devops', baseVelocity: 7 }
+  { id: 'dev-shield-1', teamId: 'team-shield', name: 'Alex Volkov', role: 'Backend Engineer', capabilities: ['backend'], baseVelocity: 9 },
+  { id: 'dev-shield-2', teamId: 'team-shield', name: 'Dana Scully', role: 'QA Engineer', capabilities: ['qa'], baseVelocity: 4 },
+  { id: 'dev-shield-3', teamId: 'team-shield', name: 'Fox Mulder', role: 'DevOps', capabilities: ['devops'], baseVelocity: 7 }
 ];
 
 function isBrowser() {
@@ -147,6 +149,7 @@ function createMockDeveloper(teamId: string, payload: DeveloperCreateRequest): D
     teamId,
     name: payload.name,
     role: payload.role,
+    capabilities: payload.capabilities,
     baseVelocity: payload.baseVelocity,
   };
 
@@ -183,3 +186,93 @@ export const removeDeveloper = (teamId: string, developerId: string) =>
         setMockDevelopers(nextDevelopers);
         return { status: 'SKIPPED_BACKEND_STEP_12', teamId, developerId };
       });
+
+/**
+ * Load sample teams and developers for rapid testing.
+ * All data is ephemeral - stored in localStorage, not persisted to backend.
+ * Useful for demo and testing workflows.
+ */
+export const getTeam = (teamId: string): Promise<Team | null> =>
+  USE_REAL_API
+    ? api.get<Team>(`/api/teams/${teamId}`).then((response) => response.data)
+    : Promise.resolve(getMockTeams().find((team) => team.id === teamId) ?? null);
+
+export const linkTrelloBoard = (teamId: string, boardId: string): Promise<Team> =>
+  USE_REAL_API
+    ? api.put<Team>(`/api/teams/${teamId}/trello-board`, { boardId }).then((response) => response.data)
+    : Promise.resolve(
+        (() => {
+          const teams = getMockTeams();
+          const updated = teams.map((t) => (t.id === teamId ? { ...t, trelloBoardId: boardId } : t));
+          setMockTeams(updated);
+          return updated.find((t) => t.id === teamId)!;
+        })(),
+      );
+
+export interface TrelloBoard {
+  id: string;
+  name: string;
+  url?: string;
+}
+
+export const getTrelloBoards = (): Promise<TrelloBoard[]> =>
+  api.get<TrelloBoard[]>('/api/teams/trello/boards').then((response) => response.data);
+
+export interface TrelloMember {
+  id: string;
+  fullName: string;
+  username: string;
+}
+
+export const getTrelloMembers = (teamId: string): Promise<TrelloMember[]> =>
+  api.get<TrelloMember[]>(`/api/teams/${teamId}/trello/members`).then((r) => r.data);
+
+export const linkTrelloMember = (teamId: string, devId: string, trelloMemberId: string): Promise<void> =>
+  api.put(`/api/teams/${teamId}/developers/${devId}/trello-member`, { trelloMemberId }).then(() => undefined);
+
+export interface DeveloperUpdateRequest {
+  name: string;
+  role: string;
+  capabilities: string[];
+}
+
+export const updateDeveloper = (teamId: string, devId: string, payload: DeveloperUpdateRequest): Promise<Developer> =>
+  api.put<Developer>(`/api/teams/${teamId}/developers/${devId}`, payload).then((r) => r.data);
+
+export const loadSampleData = async () => {
+  if (USE_REAL_API) {
+    const response = await api.post<{ teamsCreated: number; developersCreated: number; firstTeamId?: string | null }>(
+      '/api/teams/sample-data',
+    );
+    return response.data;
+  }
+
+  const existingTeams = getMockTeams();
+
+  // Only add sample teams if they don't already exist
+  const teamsToAdd = SAMPLE_TEAMS.filter(
+    (sample) => !existingTeams.some((existing) => existing.id === sample.id)
+  );
+
+  if (teamsToAdd.length > 0) {
+    const updatedTeams = [...existingTeams, ...teamsToAdd];
+    setMockTeams(updatedTeams);
+  }
+
+  // Add sample developers for sample teams
+  const existingDevelopers = getMockDevelopers();
+  const developersToAdd = SAMPLE_DEVELOPERS.filter(
+    (sample) => !existingDevelopers.some((existing) => existing.id === sample.id)
+  );
+
+  if (developersToAdd.length > 0) {
+    const updatedDevelopers = [...existingDevelopers, ...developersToAdd];
+    setMockDevelopers(updatedDevelopers);
+  }
+
+  return {
+    teamsCreated: teamsToAdd.length,
+    developersCreated: developersToAdd.length,
+    firstTeamId: SAMPLE_TEAMS[0]?.id ?? null,
+  };
+};

@@ -30,4 +30,9 @@ public class JpaTeamRepository implements TeamRepository {
     public List<Team> findAll() {
         return teamJpaRepository.findAll();
     }
+
+    @Override
+    public List<Team> findByOwnerId(UUID ownerId) {
+        return teamJpaRepository.findByOwnerId(ownerId);
+    }
 }

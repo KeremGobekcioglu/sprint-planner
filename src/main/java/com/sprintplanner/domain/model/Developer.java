@@ -7,6 +7,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -30,9 +33,12 @@ public class Developer {
     @Column(nullable = false)
     private String name;
 
-    /** backend | frontend | qa | devops */
+    /** backend | frontend | qa | devops | android | ios | fullstack | custom */
     @Column(nullable = false)
     private String role;
+
+    @Column(name = "capabilities")
+    private String capabilities;
 
     /** Base story points per sprint (before capacity adjustment). */
     @Column(name = "base_velocity", nullable = false)
@@ -60,6 +66,23 @@ public class Developer {
     public String getName() { return name; }
     public String getRole() { return role; }
     public int getBaseVelocity() { return baseVelocity; }
+    public String getCapabilitiesRaw() { return capabilities; }
+
+    @Transient
+    public List<String> getCapabilities() {
+        if (capabilities == null || capabilities.isBlank()) {
+            return List.of();
+        }
+        String[] tokens = capabilities.split(",");
+        List<String> values = new ArrayList<>();
+        for (String token : tokens) {
+            String normalized = normalizeCapability(token);
+            if (!normalized.isBlank() && !values.contains(normalized)) {
+                values.add(normalized);
+            }
+        }
+        return values;
+    }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -71,4 +94,26 @@ public class Developer {
     public void setBaseVelocity(int baseVelocity) { this.baseVelocity = baseVelocity; }
     public String getTrelloMemberId() { return trelloMemberId; }
     public void setTrelloMemberId(String trelloMemberId) { this.trelloMemberId = trelloMemberId; }
+
+    public void setCapabilities(List<String> capabilities) {
+        if (capabilities == null || capabilities.isEmpty()) {
+            this.capabilities = null;
+            return;
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String value : capabilities) {
+            String normalizedValue = normalizeCapability(value);
+            if (!normalizedValue.isBlank() && !normalized.contains(normalizedValue)) {
+                normalized.add(normalizedValue);
+            }
+        }
+        this.capabilities = normalized.isEmpty() ? null : String.join(",", normalized);
+    }
+
+    private String normalizeCapability(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase();
+    }
 }

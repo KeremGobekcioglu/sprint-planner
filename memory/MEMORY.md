@@ -1,0 +1,2 @@
+- [Project Architecture](project_architecture.md) — Hexagonal monolith, VITE_USE_REAL_API toggle, AI pipeline, memory system, auth, DB
+- [Phase 2 Audit & Fixes](audit_fixes_phase2.md) — All 17 fixes applied: API contract mismatches, broken wires, back nav, seeder, profile page, error UX, active sprint detection

@@ -13,12 +13,16 @@ import com.sprintplanner.domain.port.out.DistributionPort;
 import com.sprintplanner.infrastructure.config.GeminiConfig;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @Component
 @Primary
 public class GeminiDistributionAdapter implements DistributionPort {
+
+    private static final Logger logger = LoggerFactory.getLogger(GeminiDistributionAdapter.class);
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
@@ -34,35 +38,89 @@ public class GeminiDistributionAdapter implements DistributionPort {
             String sprintGoal,
             List<UserStory> estimatedUserStories,
             Map<UUID, Integer> capacityByDeveloper,
+            Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerNames,
             String teamProfileMemory,
             String sprintHistoryMemory
     ) {
+        if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
+            logger.info("[DISTRIBUTION] Team profile memory loaded ({} chars): ...{}",
+                teamProfileMemory.length(),
+                teamProfileMemory.substring(0, Math.min(200, teamProfileMemory.length())));
+        } else {
+            logger.info("[DISTRIBUTION] No team profile memory — fresh start mode");
+        }
+
+        if (sprintHistoryMemory != null && !sprintHistoryMemory.isBlank()) {
+            logger.info("[DISTRIBUTION] Sprint history memory loaded ({} chars)", sprintHistoryMemory.length());
+        } else {
+            logger.info("[DISTRIBUTION] No sprint history memory");
+        }
+
+        logger.info("[DISTRIBUTION] Developer capabilities: {}",
+            developerCapabilities == null ? "null" :
+            developerCapabilities.entrySet().stream()
+                .map(e -> {
+                    String name = developerNames != null
+                        ? developerNames.getOrDefault(e.getKey(), e.getKey().toString().substring(0, 8))
+                        : e.getKey().toString().substring(0, Math.min(8, e.getKey().toString().length()));
+                    return name + "=" + e.getValue();
+                })
+                .collect(java.util.stream.Collectors.joining(", ")));
         if (estimatedUserStories == null || estimatedUserStories.isEmpty()) {
-            return new SprintPlan(teamId, sprintGoal, List.of());
+            return new SprintPlan(teamId, sprintGoal, List.of(), List.of(), null, null);
         }
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {
-            return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories);
+            return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories, List.of());
         }
 
         String prompt = buildPrompt(
-                estimatedUserStories, capacityByDeveloper,
-                teamProfileMemory, sprintHistoryMemory
+                estimatedUserStories, capacityByDeveloper, developerCapabilities,
+                developerNames, teamProfileMemory, sprintHistoryMemory
         );
 
         String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION);
 
-        applyAssignments(estimatedUserStories, capacityByDeveloper, raw);
+        List<Task> unassignedTasks = applyAssignments(
+            estimatedUserStories,
+            capacityByDeveloper,
+            developerCapabilities,
+            raw
+        );
 
-        return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories);
+        return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories, unassignedTasks);
     }
 
-    private SprintPlan convertToSprintPlan(UUID teamId, String sprintGoal, List<UserStory> userStories) {
+    private SprintPlan convertToSprintPlan(UUID teamId, String sprintGoal, List<UserStory> userStories, List<Task> unassignedTasks) {
+        Set<UUID> unassignedIds = (unassignedTasks == null || unassignedTasks.isEmpty())
+            ? Set.of()
+            : unassignedTasks.stream().map(Task::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<com.sprintplanner.domain.dto.UserStoryDto> storyDtos = userStories.stream()
+            .map(story -> {
+                List<com.sprintplanner.domain.dto.TaskDto> filteredTasks = story.getTasks() == null
+                    ? List.of()
+                    : story.getTasks().stream()
+                        .filter(t -> !unassignedIds.contains(t.getId()))
+                        .map(SprintPlanMapper::toDto)
+                        .toList();
+                return new com.sprintplanner.domain.dto.UserStoryDto(
+                    story.getId(), story.getSprintId(), story.getEpicTitle(),
+                    story.getTitle(), story.getStoryPoints(), story.getStatus(), filteredTasks
+                );
+            })
+            .toList();
+
         return new SprintPlan(
             teamId,
             sprintGoal,
-            userStories.stream()
-                .map(SprintPlanMapper::toDto)
-                .toList()
+            storyDtos,
+            unassignedTasks == null
+                ? List.of()
+                : unassignedTasks.stream().map(SprintPlanMapper::toDto).toList(),
+            null,
+            null
         );
     }
 
@@ -71,6 +129,8 @@ public class GeminiDistributionAdapter implements DistributionPort {
     private String buildPrompt(
             List<UserStory> stories,
             Map<UUID, Integer> capacityByDeveloper,
+            Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerNames,
             String teamProfile,
             String sprintHistory
     ) {
@@ -78,12 +138,26 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         sb.append("You are an expert sprint planner. Assign each task to a developer.\n\n");
 
-        sb.append("## Developers and their capacity (story points available)\n");
+        sb.append("## Developers and their capacity\n");
         for (Map.Entry<UUID, Integer> entry : capacityByDeveloper.entrySet()) {
-            sb.append("- developerId: ").append(entry.getKey())
-                    .append(" | capacity: ").append(entry.getValue()).append(" pts\n");
+            List<String> capabilities = developerCapabilities == null
+                ? List.of()
+                : developerCapabilities.getOrDefault(entry.getKey(), List.of());
+            String name = developerNames != null
+                ? developerNames.getOrDefault(entry.getKey(), entry.getKey().toString())
+                : entry.getKey().toString();
+            sb.append("- ").append(name)
+                .append(" (developerId: ").append(entry.getKey()).append(")")
+                .append(" | capabilities: ").append(capabilities.isEmpty() ? "none" : String.join(", ", capabilities))
+                .append(" | capacity: ").append(entry.getValue()).append(" pts\n");
         }
         sb.append("\n");
+
+        if (sprintHistory != null && !sprintHistory.isBlank()) {
+            sb.append("## Developer Performance Notes\n");
+            sb.append("Use this to prefer developers with better track records for task types:\n");
+            sb.append(sprintHistory).append("\n\n");
+        }
 
         sb.append("## Tasks to assign\n");
         for (UserStory story : stories) {
@@ -107,39 +181,39 @@ public class GeminiDistributionAdapter implements DistributionPort {
         }
 
         sb.append("## Assignment Rules\n");
-        sb.append("- Match task roleTag to developer's role where possible.\n");
-        sb.append("- Do NOT assign more points to a developer than their capacity.\n");
-        sb.append("- Distribute load evenly — avoid overloading one developer.\n");
-        sb.append("- If a task cannot be assigned without exceeding all capacities, still assign it to the best fit and flag it.\n\n");
+        sb.append("- Track remaining capacity per developer as you assign tasks.\n");
+        sb.append("- Never exceed a developer's remaining capacity.\n");
+        sb.append("- Only assign a task to a developer whose capabilities include the task roleTag.\n");
+        sb.append("- If no developer has the matching roleTag, return: { \"taskId\": \"...\", \"unassigned\": true }.\n");
+        sb.append("- Distribute load evenly among developers with the same capability.\n");
+        sb.append("- If all role-matched developers are full, assign to the best remaining fit and set overCapacity: true.\n\n");
 
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a valid JSON array. No explanation, no markdown, no backticks.\n");
-        sb.append("Each element: { \"taskId\": \"<uuid>\", \"developerId\": \"<uuid>\", \"overCapacity\": <true|false> }\n\n");
+        sb.append("Each element is either:\n");
+        sb.append("- { \"taskId\": \"<uuid>\", \"developerId\": \"<uuid>\", \"overCapacity\": false, \"reason\": \"<one sentence why>\" }\n");
+        sb.append("- { \"taskId\": \"<uuid>\", \"unassigned\": true, \"reason\": \"<why unassigned>\" }\n\n");
 
         sb.append("## Example Output\n");
         sb.append("""
             [
-              { "taskId": "aaa-111", "developerId": "dev-001", "overCapacity": false },
-              { "taskId": "bbb-222", "developerId": "dev-002", "overCapacity": false },
-              { "taskId": "ccc-333", "developerId": "dev-001", "overCapacity": true }
+              { "taskId": "aaa-111", "developerId": "dev-001", "overCapacity": false, "reason": "Jordan has backend capability and available capacity." },
+              { "taskId": "bbb-222", "unassigned": true, "reason": "No developer with QA capability has remaining capacity." },
+              { "taskId": "ccc-333", "developerId": "dev-001", "overCapacity": true, "reason": "Only developer with frontend capability, assigned despite over capacity." }
             ]
             """);
 
         return sb.toString();
     }
 
-
-
-
-
     // ── Apply assignments back to tasks ──────────────────────────────────────
 
-    private void applyAssignments(
+    private List<Task> applyAssignments(
             List<UserStory> stories,
             Map<UUID, Integer> capacityByDeveloper,
+            Map<UUID, List<String>> developerCapabilities,
             String raw
     ) {
-        // Build taskId -> task lookup
         Map<String, Task> taskById = new HashMap<>();
         for (UserStory story : stories) {
             if (story.getTasks() == null) continue;
@@ -147,6 +221,9 @@ public class GeminiDistributionAdapter implements DistributionPort {
                 taskById.put(task.getId().toString(), task);
             }
         }
+
+        Map<UUID, Integer> remaining = new LinkedHashMap<>(capacityByDeveloper);
+        List<Task> unassignedTasks = new ArrayList<>();
 
         try {
             String cleaned = raw.trim()
@@ -156,11 +233,9 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
             JsonNode root = objectMapper.readTree(cleaned);
             if (!root.isArray()) {
-                applyFallbackAssignments(stories, capacityByDeveloper);
-                return;
+                return applyFallbackAssignments(stories, remaining, developerCapabilities);
             }
 
-            // Validate developer IDs returned by LLM are real
             Set<String> validDevIds = new HashSet<>();
             for (UUID id : capacityByDeveloper.keySet()) {
                 validDevIds.add(id.toString());
@@ -168,39 +243,179 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
             for (JsonNode node : root) {
                 String taskId = node.path("taskId").asText();
-                String devId = node.path("developerId").asText();
+                boolean unassigned = node.path("unassigned").asBoolean(false);
 
                 Task task = taskById.get(taskId);
-                if (task == null) continue;                      // unknown task — skip
-                if (!validDevIds.contains(devId)) continue;      // hallucinated dev — skip
+                if (task == null) continue;
 
-                task.setAssignedDevId(UUID.fromString(devId));
+                String reason = node.path("reason").asText(null);
+                task.setAssignmentReason(reason);
+
+                if (unassigned) {
+                    task.setAssignedDevId(null);
+                    unassignedTasks.add(task);
+                    continue;
+                }
+
+                String devId = node.path("developerId").asText();
+                if (!validDevIds.contains(devId)) {
+                    continue;
+                }
+
+                UUID developerId = UUID.fromString(devId);
+                AssignmentResult result = assignTaskWithGuards(
+                    task,
+                    developerId,
+                    remaining,
+                    developerCapabilities
+                );
+                if (result.unassigned) {
+                    unassignedTasks.add(task);
+                }
             }
 
         } catch (Exception e) {
-            applyFallbackAssignments(stories, capacityByDeveloper);
+            return applyFallbackAssignments(stories, remaining, developerCapabilities);
         }
+
+        return unassignedTasks;
     }
 
-    // Fallback: round-robin by capacity if LLM parse fails
-    private void applyFallbackAssignments(
+    private List<Task> applyFallbackAssignments(
             List<UserStory> stories,
-            Map<UUID, Integer> capacityByDeveloper
+            Map<UUID, Integer> remaining,
+            Map<UUID, List<String>> developerCapabilities
     ) {
-        List<UUID> devs = new ArrayList<>(capacityByDeveloper.keySet());
-        if (devs.isEmpty()) return;
-
-        Map<UUID, Integer> remaining = new LinkedHashMap<>(capacityByDeveloper);
-        int pointer = 0;
+        List<Task> unassignedTasks = new ArrayList<>();
 
         for (UserStory story : stories) {
             if (story.getTasks() == null) continue;
             for (Task task : story.getTasks()) {
-                UUID assigned = devs.get(pointer % devs.size());
-                task.setAssignedDevId(assigned);
-                remaining.merge(assigned, -task.getStoryPoints(), Integer::sum);
-                pointer++;
+                AssignmentResult result = assignTaskWithGuards(
+                    task,
+                    null,
+                    remaining,
+                    developerCapabilities
+                );
+                if (result.unassigned) {
+                    unassignedTasks.add(task);
+                }
             }
+        }
+
+        return unassignedTasks;
+    }
+
+    private AssignmentResult assignTaskWithGuards(
+        Task task,
+        UUID preferredDeveloper,
+        Map<UUID, Integer> remaining,
+        Map<UUID, List<String>> developerCapabilities
+    ) {
+        String roleTag = normalizeRole(task.getRoleTag());
+        Map<String, List<UUID>> roleToDevelopers = buildRoleMap(developerCapabilities);
+        List<UUID> roleDevelopers = roleToDevelopers.getOrDefault(roleTag, List.of());
+
+        if (roleDevelopers.isEmpty()) {
+            task.setAssignedDevId(null);
+            return AssignmentResult.unassigned();
+        }
+
+        UUID selected = selectRoleDeveloper(roleDevelopers, preferredDeveloper, remaining, task.getStoryPoints());
+        if (selected == null) {
+            task.setAssignedDevId(null);
+            return AssignmentResult.unassigned();
+        }
+
+        task.setAssignedDevId(selected);
+        remaining.merge(selected, -Math.max(1, task.getStoryPoints()), Integer::sum);
+        return AssignmentResult.assigned();
+    }
+
+    private UUID selectRoleDeveloper(
+        List<UUID> roleDevelopers,
+        UUID preferredDeveloper,
+        Map<UUID, Integer> remaining,
+        int storyPoints
+    ) {
+        int needed = Math.max(1, storyPoints);
+        UUID preferred = preferredDeveloper != null && roleDevelopers.contains(preferredDeveloper)
+            ? preferredDeveloper
+            : null;
+
+        if (preferred != null && remaining.getOrDefault(preferred, 0) >= needed) {
+            return preferred;
+        }
+
+        UUID bestFit = null;
+        int bestRemaining = Integer.MIN_VALUE;
+        for (UUID developerId : roleDevelopers) {
+            int capacity = remaining.getOrDefault(developerId, 0);
+            if (capacity >= needed && capacity > bestRemaining) {
+                bestFit = developerId;
+                bestRemaining = capacity;
+            }
+        }
+
+        if (bestFit != null) {
+            return bestFit;
+        }
+
+        UUID fallback = null;
+        int fallbackRemaining = Integer.MIN_VALUE;
+        for (UUID developerId : roleDevelopers) {
+            int capacity = remaining.getOrDefault(developerId, 0);
+            if (capacity > fallbackRemaining) {
+                fallbackRemaining = capacity;
+                fallback = developerId;
+            }
+        }
+
+        return fallbackRemaining > 0 ? fallback : null;
+    }
+
+    private Map<String, List<UUID>> buildRoleMap(Map<UUID, List<String>> developerCapabilities) {
+        Map<String, List<UUID>> roleToDevelopers = new HashMap<>();
+        if (developerCapabilities == null) {
+            return roleToDevelopers;
+        }
+        for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
+            List<String> capabilities = entry.getValue() == null ? List.of() : entry.getValue();
+            for (String capability : capabilities) {
+                String normalized = normalizeRole(capability);
+                if (normalized.isBlank()) {
+                    continue;
+                }
+                roleToDevelopers.computeIfAbsent(normalized, key -> new ArrayList<>()).add(entry.getKey());
+            }
+        }
+        logger.info("[DISTRIBUTION] Role map built: {}",
+            roleToDevelopers.entrySet().stream()
+                .map(e -> e.getKey() + "=" + e.getValue().size() + " devs")
+                .collect(java.util.stream.Collectors.joining(", ")));
+        return roleToDevelopers;
+    }
+
+    private String normalizeRole(String role) {
+        if (role == null) {
+            return "";
+        }
+        return role.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static final class AssignmentResult {
+        private final boolean unassigned;
+
+        private AssignmentResult(boolean unassigned) {
+            this.unassigned = unassigned;
+        }
+
+        private static AssignmentResult unassigned() {
+            return new AssignmentResult(true);
+        }
+
+        private static AssignmentResult assigned() {
+            return new AssignmentResult(false);
         }
     }
 }

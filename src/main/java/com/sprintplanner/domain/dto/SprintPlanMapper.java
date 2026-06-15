@@ -4,9 +4,7 @@ import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.model.Sprint;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Static utility mapper for converting JPA entities to lightweight DTOs.
@@ -35,7 +33,8 @@ public class SprintPlanMapper {
             task.getRoleTag(),
             task.getStoryPoints(),
             task.getStatus(),
-            task.getTrelloCardId()
+            task.getTrelloCardId(),
+            task.getAssignmentReason()
         );
     }
 
@@ -79,7 +78,10 @@ public class SprintPlanMapper {
         return new SprintPlan(
             sprint.getTeamId(),
             sprint.getGoal(),
-            storyDtos
+            storyDtos,
+            List.of(),
+            sprint.getStatus().name(),
+            null
         );
     }
 
@@ -91,7 +93,7 @@ public class SprintPlanMapper {
         if (dto == null) {
             return null;
         }
-        return new Task(
+        Task task = new Task(
             dto.id(),
             dto.storyId(),
             dto.assignedDevId(),
@@ -103,6 +105,8 @@ public class SprintPlanMapper {
             dto.status(),
             dto.trelloCardId()
         );
+        task.setAssignmentReason(dto.assignmentReason());
+        return task;
     }
 
     /**
@@ -122,7 +126,7 @@ public class SprintPlanMapper {
             dto.status()
         );
         if (dto.tasks() != null) {
-            Set<Task> tasks = new HashSet<>();
+            List<Task> tasks = new ArrayList<>();
             for (TaskDto taskDto : dto.tasks()) {
                 tasks.add(fromDto(taskDto));
             }
@@ -131,5 +135,3 @@ public class SprintPlanMapper {
         return story;
     }
 }
-
-

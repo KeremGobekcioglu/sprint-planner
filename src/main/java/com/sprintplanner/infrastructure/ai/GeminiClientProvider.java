@@ -37,19 +37,26 @@ public class GeminiClientProvider {
         Exception lastException = null;
 
         for (String model : chain) {
+            long start = System.currentTimeMillis();
+            log.info("Gemini [{}] calling — prompt={}ch, temperature={}", model, prompt.length(), temperature);
             try {
                 GenerateContentConfig config = GenerateContentConfig.builder()
                         .temperature(temperature)
                         .build();
                 String result = client.models.generateContent(model, prompt, config).text();
-                log.debug("=== GEMINI [{}] ===\nPROMPT:\n{}\nRESPONSE:\n{}", model, prompt, result);
+                long elapsed = System.currentTimeMillis() - start;
+                log.info("Gemini [{}] OK — {}ms | response={}ch", model, elapsed, result == null ? 0 : result.length());
+                log.debug("Gemini [{}] full response:\n{}", model, result);
                 return result;
 
             } catch (Exception e) {
+                long elapsed = System.currentTimeMillis() - start;
                 lastException = e;
                 if (!isRetryable(e)) {
+                    log.error("Gemini [{}] non-retryable error after {}ms: {}", model, elapsed, e.getMessage());
                     throw new RuntimeException("Non-retryable Gemini error on model " + model, e);
                 }
+                log.warn("Gemini [{}] retryable error after {}ms ({}), trying next model...", model, elapsed, e.getMessage());
                 sleep(2000);
             }
         }
@@ -59,14 +66,24 @@ public class GeminiClientProvider {
     }
 
     private boolean isRetryable(Exception e) {
-        String msg = e.getMessage();
-        if (msg == null) return false;
-        return msg.contains("503")
-                || msg.contains("429")
+        if (e == null) return false;
+        String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+        if (msg.contains("429")
+                || msg.contains("503")
                 || msg.contains("overloaded")
                 || msg.contains("high demand")
-                || msg.contains("UNAVAILABLE")
-                || msg.contains("quota");
+                || msg.contains("unavailable")
+                || msg.contains("quota")
+                || msg.contains("rate limit")
+                || msg.contains("too many requests")
+                || msg.contains("service unavailable")) {
+            return true;
+        }
+        Throwable cause = e.getCause();
+        if (cause instanceof Exception causeEx && cause != e) {
+            return isRetryable(causeEx);
+        }
+        return false;
     }
 
     private void sleep(long ms) {

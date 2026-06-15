@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.model.Task;
@@ -14,6 +15,8 @@ import com.sprintplanner.infrastructure.config.GeminiConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -24,6 +27,8 @@ import java.util.UUID;
 @Component
 @Primary
 public class GeminiBreakdownAdapter implements BreakdownPort {
+
+    private static final Logger logger = LoggerFactory.getLogger(GeminiBreakdownAdapter.class);
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;
@@ -37,13 +42,27 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
     public List<UserStory> breakdown(
             PlanningRequest request,
             String teamProfileMemory,
-            String sprintHistoryMemory
+            String sprintHistoryMemory,
+            int totalCapacity
     ) {
+        if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
+            logger.info("[BREAKDOWN] Team profile memory loaded ({} chars): ...{}",
+                teamProfileMemory.length(),
+                teamProfileMemory.substring(0, Math.min(200, teamProfileMemory.length())));
+        } else {
+            logger.info("[BREAKDOWN] No team profile memory — fresh start mode");
+        }
+
+        if (sprintHistoryMemory != null && !sprintHistoryMemory.isBlank()) {
+            logger.info("[BREAKDOWN] Sprint history memory loaded ({} chars)", sprintHistoryMemory.length());
+        } else {
+            logger.info("[BREAKDOWN] No sprint history memory");
+        }
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         if (epics.isEmpty()) return List.of();
 
         // ONE call for all epics
-        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory);
+        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity);
         String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
         List<UserStory> stories = parseResponse(raw, epics);
 
@@ -51,7 +70,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         if (!isValid(stories)) {
             String retryPrompt = buildRetryPrompt(raw);
 // in breakdown() retry:
-            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_ESTIMATION);
+            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY);
             stories = parseResponse(retryRaw, epics);
         }
 
@@ -138,7 +157,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         return sb.toString();
     }
     private String buildBatchPrompt(List<Epic> epics, PlanningRequest request,
-                                    String teamProfile, String sprintHistory) {
+                                    String teamProfile, String sprintHistory, int totalCapacity) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("You are an expert agile sprint planner. Break down ALL epics below into user stories and tasks.\n\n");
@@ -181,10 +200,25 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         }
         sb.append("\n");
 
+        sb.append("## Capacity Constraint\n");
+        sb.append("Total team capacity for this sprint: ").append(totalCapacity).append(" story points.\n");
+        sb.append("Generate tasks whose total estimated effort stays within this budget.\n");
+        sb.append("Assume backend tasks ~5pts, frontend ~3pts, qa ~2pts, devops ~3pts.\n");
+        sb.append("Produce fewer stories per epic if needed — quality over quantity.\n");
+        sb.append("Do NOT generate more work than the team can complete.\n\n");
+
+        List<CarryoverTaskDto> carryovers = request.carryoverTasks();
+        if (carryovers != null && !carryovers.isEmpty()) {
+            sb.append("## Carry-over Note\n");
+            sb.append("Note: ").append(carryovers.size())
+                .append(" carry-over task(s) from the previous sprint are included separately. ")
+                .append("Do not regenerate tasks for topics that appear to be carry-over work.\n\n");
+        }
+
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");
         sb.append("Each element is a user story object with: epicTitle (string), title (string), tasks (array of 2-4 objects).\n");
-        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops).\n");
+        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops|android|ios).\n");
         sb.append("Produce 1-3 user stories per epic.\n\n");
 
         sb.append("## Example Output Shape\n");
@@ -199,6 +233,12 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                 "description": "POST /transfers/validate-iban",
                 "acceptanceCriterion": "Invalid IBANs return 400. Valid IBANs return 200.",
                 "roleTag": "backend"
+              },
+              {
+                "title": "Build Android transfer screen",
+                "description": "Native Android screen for IBAN entry and transfer confirmation.",
+                "acceptanceCriterion": "User can submit a transfer on Android. Error states shown inline.",
+                "roleTag": "android"
               }
             ]
           }
@@ -256,7 +296,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                         "PLANNED"
                 );
 
-                Set<Task> tasks = new HashSet<>();
+                List<Task> tasks = new ArrayList<>();
                 for (JsonNode taskNode : storyNode.path("tasks")) {
                     Task task = new Task(
                             UUID.randomUUID(),
@@ -306,7 +346,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             for (Task task : story.getTasks()) {
                 if (task.getTitle() == null || task.getTitle().isBlank()) return false;
                 if (task.getAcceptanceCriterion() == null || task.getAcceptanceCriterion().isBlank()) return false;
-                if (!List.of("backend", "frontend", "qa", "devops").contains(task.getRoleTag())) return false;
+                if (!List.of("backend", "frontend", "qa", "devops", "android", "ios").contains(task.getRoleTag())) return false;
             }
         }
 

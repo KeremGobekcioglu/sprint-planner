@@ -12,6 +12,7 @@ public interface BreakdownPort {
     List<UserStory> breakdown(
         PlanningRequest request,
         String teamProfileMemory,
-        String sprintHistoryMemory
+        String sprintHistoryMemory,
+        int totalCapacity
     );
 }

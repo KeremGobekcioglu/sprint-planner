@@ -17,15 +17,15 @@ export function SignupPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/teams', { replace: true });
+      navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
   const signupMutation = useMutation({
     mutationFn: () => register(email, password),
     onSuccess: (data) => {
-      loginStore(data.token, data.userId, data.email);
-      navigate('/teams');
+      loginStore(data.token, data.userId, data.email, data.name, data.role);
+      navigate('/dashboard', { replace: true });
     },
     onError: (err: unknown) => {
       if (isAxiosError(err)) {

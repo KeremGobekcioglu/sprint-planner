@@ -1,24 +1,40 @@
 package com.sprintplanner.application;
 
 import com.sprintplanner.domain.model.DevCompletion;
+import com.sprintplanner.domain.model.Developer;
+import com.sprintplanner.domain.model.Sprint;
 import com.sprintplanner.domain.model.SprintReview;
+import com.sprintplanner.domain.port.out.DeveloperRepository;
 import com.sprintplanner.domain.port.out.MemoryWriter;
+import com.sprintplanner.domain.port.out.SprintRepository;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ReferenceBuilder {
 
-    private final MemoryWriter memoryWriter;
+    private static final Logger logger = LoggerFactory.getLogger(ReferenceBuilder.class);
 
-    public ReferenceBuilder(MemoryWriter memoryWriter) {
+    private final MemoryWriter memoryWriter;
+    private final DeveloperRepository developerRepository;
+    private final SprintRepository sprintRepository;
+
+    public ReferenceBuilder(MemoryWriter memoryWriter, DeveloperRepository developerRepository,
+            SprintRepository sprintRepository) {
         this.memoryWriter = memoryWriter;
+        this.developerRepository = developerRepository;
+        this.sprintRepository = sprintRepository;
     }
 
     public void updateSprintHistory(UUID teamId, List<SprintReview> reviews) {
+        logger.info("[MEMORY] Writing sprint history via {}", memoryWriter.getClass().getSimpleName());
         String markdown = buildSprintHistoryMarkdown(reviews);
         memoryWriter.writeSprintHistory(teamId, markdown);
     }
@@ -41,25 +57,45 @@ public class ReferenceBuilder {
         }
 
         for (SprintReview review : sorted) {
-            builder.append("## Sprint Review ").append(review.getId()).append(System.lineSeparator())
-                .append("- Goal result: ").append(review.getGoalResult()).append(System.lineSeparator())
-                .append("- Planned points: ").append(review.getTotalPlannedPts()).append(System.lineSeparator())
-                .append("- Completed points: ").append(review.getTotalCompletedPts()).append(System.lineSeparator())
-                .append("- Blocker: ").append(review.getBlockerNote() == null ? "None" : review.getBlockerNote())
+            Sprint sprint = sprintRepository.findById(review.getSprintId()).orElse(null);
+            String goalText = sprint != null && sprint.getGoal() != null ? sprint.getGoal() : "Unknown";
+            String sprintLabel = sprint != null
+                ? "Sprint " + sprint.getSprintNumber() + " — " + goalText
+                : "Sprint — " + goalText;
+
+            builder.append("## ").append(sprintLabel).append(System.lineSeparator())
+                .append("Goal result: ").append(review.getGoalResult()).append(System.lineSeparator())
+                .append("Planned: ").append(review.getTotalPlannedPts())
+                .append(" pts | Completed: ").append(review.getTotalCompletedPts()).append(" pts")
+                .append(System.lineSeparator())
+                .append("Blocker: ").append(review.getBlockerNote() == null ? "None" : review.getBlockerNote())
                 .append(System.lineSeparator());
 
             if (review.getDevCompletions() != null && !review.getDevCompletions().isEmpty()) {
-                builder.append("- Developer completion:").append(System.lineSeparator());
+                builder.append(System.lineSeparator())
+                    .append("Developer completion:").append(System.lineSeparator())
+                    .append("| Developer | Planned | Completed | Rate |").append(System.lineSeparator())
+                    .append("|-----------|---------|-----------|------|").append(System.lineSeparator());
+
                 for (DevCompletion completion : review.getDevCompletions()) {
-                    builder.append("  - ")
-                        .append(completion.getDeveloperId())
-                        .append(" planned ")
-                        .append(completion.getPlannedPts())
-                        .append(", completed ")
-                        .append(completion.getCompletedPts())
-                        .append(System.lineSeparator());
+                    String displayName = developerRepository.findById(completion.getDeveloperId())
+                        .map(Developer::getName)
+                        .orElse(completion.getDeveloperId().toString());
+
+                    int planned = completion.getPlannedPts();
+                    int completed = completion.getCompletedPts();
+                    String rate = planned > 0
+                        ? Math.round((double) completed / planned * 100) + "%"
+                        : "N/A";
+
+                    builder.append("| ").append(displayName)
+                        .append(" | ").append(planned)
+                        .append(" | ").append(completed)
+                        .append(" | ").append(rate)
+                        .append(" |").append(System.lineSeparator());
                 }
             }
+
             builder.append(System.lineSeparator());
         }
 

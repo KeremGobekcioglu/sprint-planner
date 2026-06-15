@@ -1,6 +1,7 @@
 package com.sprintplanner.web.dto;
 
 import com.sprintplanner.domain.model.Developer;
+import java.util.List;
 import java.util.UUID;
 
 public record DeveloperHttpDto(
@@ -8,7 +9,9 @@ public record DeveloperHttpDto(
     UUID teamId,
     String name,
     String role,
-    int baseVelocity
+    List<String> capabilities,
+    int baseVelocity,
+    String trelloMemberId
 ) {
 
     public static DeveloperHttpDto from(Developer developer) {
@@ -17,7 +20,9 @@ public record DeveloperHttpDto(
             developer.getTeamId(),
             developer.getName(),
             developer.getRole(),
-            developer.getBaseVelocity()
+            developer.getCapabilities(),
+            developer.getBaseVelocity(),
+            developer.getTrelloMemberId()
         );
     }
 }

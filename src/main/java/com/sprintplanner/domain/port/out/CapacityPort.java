@@ -14,6 +14,7 @@ public interface CapacityPort {
         List<Developer> developers,
         int sprintLengthDays,
         Map<UUID, Integer> daysOffByDeveloper,
-        String sprintHistoryMemory
+        String sprintHistoryMemory,
+        UUID teamId
     );
 }

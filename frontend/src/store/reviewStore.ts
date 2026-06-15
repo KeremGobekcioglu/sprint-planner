@@ -7,11 +7,13 @@ interface ReviewStore {
   dismissedWarnings: string[];
   addEdit: (edit: EditPayload) => void;
   deferTask: (taskId: string) => void;
+  toggleDeferred: (taskId: string) => void;
+  isDeferred: (taskId: string) => boolean;
   dismissWarning: (type: string) => void;
   reset: () => void;
 }
 
-export const useReviewStore = create<ReviewStore>((set) => ({
+export const useReviewStore = create<ReviewStore>((set, get) => ({
   edits: [],
   deferredTaskIds: [],
   dismissedWarnings: [],
@@ -23,6 +25,18 @@ export const useReviewStore = create<ReviewStore>((set) => ({
       }
       return { deferredTaskIds: [...state.deferredTaskIds, taskId] };
     }),
+  toggleDeferred: (taskId) =>
+    set((state) => {
+      const isCurrentlyDeferred = state.deferredTaskIds.includes(taskId);
+      if (isCurrentlyDeferred) {
+        return {
+          deferredTaskIds: state.deferredTaskIds.filter((id) => id !== taskId),
+        };
+      } else {
+        return { deferredTaskIds: [...state.deferredTaskIds, taskId] };
+      }
+    }),
+  isDeferred: (taskId) => get().deferredTaskIds.includes(taskId),
   dismissWarning: (type) =>
     set((state) => {
       if (state.dismissedWarnings.includes(type)) {

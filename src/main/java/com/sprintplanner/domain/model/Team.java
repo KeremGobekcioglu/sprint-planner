@@ -33,6 +33,9 @@ public class Team {
     @Column(name = "sprint_length_days", nullable = false)
     private int sprintLengthDays;
 
+    @Column(name = "owner_id")
+    private UUID ownerId;
+
     @Column(name = "trello_board_id")
     private String trelloBoardId;
 
@@ -48,11 +51,12 @@ public class Team {
     public Team() {}
 
     public Team(UUID id, String name, String domain, int sprintLengthDays,
-                String trelloBoardId, Instant createdAt) {
+                UUID ownerId, String trelloBoardId, Instant createdAt) {
         this.id = id;
         this.name = name;
         this.domain = domain;
         this.sprintLengthDays = sprintLengthDays;
+        this.ownerId = ownerId;
         this.trelloBoardId = trelloBoardId;
         this.createdAt = createdAt;
     }
@@ -63,6 +67,7 @@ public class Team {
     public String getName() { return name; }
     public String getDomain() { return domain; }
     public int getSprintLengthDays() { return sprintLengthDays; }
+    public UUID getOwnerId() { return ownerId; }
     public String getTrelloBoardId() { return trelloBoardId; }
     public Instant getCreatedAt() { return createdAt; }
     public List<Developer> getDevelopers() { return developers; }
@@ -74,6 +79,7 @@ public class Team {
     public void setName(String name) { this.name = name; }
     public void setDomain(String domain) { this.domain = domain; }
     public void setSprintLengthDays(int sprintLengthDays) { this.sprintLengthDays = sprintLengthDays; }
+    public void setOwnerId(UUID ownerId) { this.ownerId = ownerId; }
     public void setTrelloBoardId(String trelloBoardId) { this.trelloBoardId = trelloBoardId; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public void setDevelopers(List<Developer> developers) { this.developers = developers; }
