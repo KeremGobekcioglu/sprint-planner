@@ -23,6 +23,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
     private static final Logger logger = LoggerFactory.getLogger(GeminiDistributionAdapter.class);
     private static final int SOLE_CAPABILITY_OVERFLOW_BUFFER_PTS = 2;
+    public static final String CARRYOVER_EPIC_TITLE = "Carry-over from previous sprint";
 
     private final GeminiClientProvider gemini;
     private final ObjectMapper objectMapper;

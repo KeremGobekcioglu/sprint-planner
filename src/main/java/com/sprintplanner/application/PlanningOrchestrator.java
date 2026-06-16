@@ -3,6 +3,10 @@ package com.sprintplanner.application;
 import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.dto.SprintPlanMapper;
+import com.sprintplanner.domain.dto.TaskDto;
+import com.sprintplanner.domain.dto.UserStoryDto;
+import com.sprintplanner.infrastructure.ai.GeminiDistributionAdapter;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.Team;
@@ -206,19 +210,75 @@ public class PlanningOrchestrator implements PlanningInputPort {
             push(userId, "estimation", "Estimation done: " + totalPoints + " total story points.");
             log.info("[Planning] teamId={} — estimation done: {} total points", request.teamId(), totalPoints);
 
-            push(userId, "distribution", "Assigning " + taskCount + " tasks to " + developers.size() + " developer(s)...");
+            // Separate carry-over story from stories that need AI distribution
+            List<UserStory> storiesForDistribution = new ArrayList<>();
+            List<UserStory> carryoverStories = new ArrayList<>();
+            for (UserStory story : estimated) {
+                if (GeminiDistributionAdapter.CARRYOVER_EPIC_TITLE.equals(story.getEpicTitle())
+                        || GeminiDistributionAdapter.CARRYOVER_EPIC_TITLE.equals(story.getTitle())) {
+                    carryoverStories.add(story);
+                } else {
+                    storiesForDistribution.add(story);
+                }
+            }
+
+            // Reserve capacity consumed by pre-assigned carry-over tasks so new tasks
+            // are distributed against what is actually left for each developer
+            Map<UUID, Integer> capacityForDistribution = new LinkedHashMap<>(capacityByDeveloper);
+            for (UserStory story : carryoverStories) {
+                if (story.getTasks() == null) continue;
+                for (Task task : story.getTasks()) {
+                    UUID devId = task.getAssignedDevId();
+                    if (devId != null) {
+                        capacityForDistribution.merge(devId, -task.getStoryPoints(), Integer::sum);
+                    }
+                }
+            }
+
+            int distTaskCount = storiesForDistribution.stream()
+                .mapToInt(s -> s.getTasks() == null ? 0 : s.getTasks().size()).sum();
+            push(userId, "distribution", "Assigning " + distTaskCount + " tasks to " + developers.size() + " developer(s)...");
             log.info("[Planning] teamId={} — distribution start", request.teamId());
             SprintPlan result = distributionPort.distribute(
                 request.teamId(),
                 request.sprintGoal(),
-                estimated,
-                capacityByDeveloper,
+                storiesForDistribution,
+                capacityForDistribution,
                 developerCapabilities,
                 developerNames,
                 teamProfileMemory,
                 effectiveSprintHistory
             );
             log.info("[Planning] teamId={} — distribution done", request.teamId());
+
+            // Merge carry-over stories back with original assignments preserved
+            if (!carryoverStories.isEmpty()) {
+                List<UserStoryDto> allStories = new ArrayList<>(result.userStories());
+                List<TaskDto> allUnassigned = new ArrayList<>(result.unassignedTasks());
+                for (UserStory story : carryoverStories) {
+                    List<TaskDto> assignedTaskDtos = new ArrayList<>();
+                    if (story.getTasks() != null) {
+                        for (Task task : story.getTasks()) {
+                            if (task.getAssignedDevId() != null) {
+                                task.setAssignmentReason("Carry-over — reassigned to original developer");
+                                assignedTaskDtos.add(SprintPlanMapper.toDto(task));
+                            } else {
+                                task.setAssignmentReason("Carry-over — was unassigned in previous sprint, assign manually");
+                                allUnassigned.add(SprintPlanMapper.toDto(task));
+                            }
+                        }
+                    }
+                    int storyPts = assignedTaskDtos.stream().mapToInt(TaskDto::storyPoints).sum();
+                    allStories.add(new UserStoryDto(
+                        story.getId(), story.getSprintId(), story.getEpicTitle(),
+                        story.getTitle(), storyPts, story.getStatus(), assignedTaskDtos
+                    ));
+                }
+                result = new SprintPlan(result.teamId(), result.sprintGoal(), allStories, allUnassigned,
+                    result.sprintStatus(), result.confidence());
+                log.info("[Planning] teamId={} — merged {} carry-over story/ies back into plan",
+                    request.teamId(), carryoverStories.size());
+            }
 
             if (userId != null) progressPort.complete(userId);
             return result;
