@@ -35,6 +35,7 @@ import com.sprintplanner.infrastructure.persistence.TaskJpaRepository;
 import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
+import com.sprintplanner.web.dto.PlanComparisonResponse;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import com.sprintplanner.web.dto.SprintReviewSummary;
 import com.sprintplanner.web.dto.TaskGuidanceResponse;
@@ -43,8 +44,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -303,8 +306,15 @@ public class SprintPlannerController {
     }
 
     @PostMapping("/{sprintId}/edits")
+    @Transactional
     public ResponseEntity<String> logEdit(@PathVariable String sprintId, @RequestBody LogEditHttpRequest request) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
+
+        UUID taskId = null;
+        if (request.entityId() != null) {
+            try { taskId = UUID.fromString(request.entityId()); } catch (IllegalArgumentException ignored) {}
+        }
+
         EditLog log = new EditLog(
             UUID.randomUUID(),
             normalizedSprintId,
@@ -314,8 +324,106 @@ public class SprintPlannerController {
             request.taskType(),
             Instant.now()
         );
+        log.setTaskId(taskId);
         editLogRepository.save(log);
+
+        // Persist field changes on the task entity so submitReview reads current PM assignments
+        if (taskId != null) {
+            final UUID finalTaskId = taskId;
+            if ("assignedDevId".equals(request.field())) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    UUID newDevId = null;
+                    String newVal = request.newValue();
+                    if (newVal != null && !"unassigned".equals(newVal)) {
+                        try { newDevId = UUID.fromString(newVal); } catch (IllegalArgumentException ignored) {}
+                    }
+                    task.setAssignedDevId(newDevId);
+                    taskJpaRepository.save(task);
+                });
+            } else if ("storyPoints".equals(request.field()) && request.newValue() != null) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    try {
+                        task.setStoryPoints(Integer.parseInt(request.newValue()));
+                        taskJpaRepository.save(task);
+                    } catch (NumberFormatException ignored) {}
+                });
+            } else if ("deferred".equals(request.field()) && request.newValue() != null) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    task.setDeferred(Boolean.parseBoolean(request.newValue()));
+                    taskJpaRepository.save(task);
+                });
+            }
+        }
+
         return ResponseEntity.ok("Edit logged.");
+    }
+
+    @GetMapping("/{sprintId}/plan/comparison")
+    public ResponseEntity<PlanComparisonResponse> getSprintPlanComparison(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findWithStoriesAndTasksById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+
+        List<EditLog> editLogs = editLogRepository.findBySprintId(normalizedSprintId);
+
+        // Per task, per field: keep only the EARLIEST original value (that's the AI's original plan)
+        Map<UUID, Map<String, String>> taskOriginals = new HashMap<>();
+        editLogs.stream()
+            .filter(e -> e.getTaskId() != null)
+            .filter(e -> "assignedDevId".equals(e.getField()) || "storyPoints".equals(e.getField()))
+            .sorted(Comparator.comparing(EditLog::getLoggedAt))
+            .forEach(e -> taskOriginals
+                .computeIfAbsent(e.getTaskId(), k -> new HashMap<>())
+                .putIfAbsent(e.getField(), e.getOriginalValue()));
+
+        List<TaskDto> aiPlan = new ArrayList<>();
+        List<TaskDto> finalPlan = new ArrayList<>();
+        Set<UUID> changedTaskIds = new HashSet<>();
+        int aiTotalPoints = 0;
+        int finalTotalPoints = 0;
+
+        if (sprint.getUserStories() != null) {
+            for (UserStory story : sprint.getUserStories()) {
+                if (story.getTasks() == null) continue;
+                for (Task task : story.getTasks()) {
+                    TaskDto finalTask = SprintPlanMapper.toDto(task);
+                    finalPlan.add(finalTask);
+                    finalTotalPoints += task.getStoryPoints();
+
+                    Map<String, String> originals = taskOriginals.get(task.getId());
+                    if (originals != null && !originals.isEmpty()) {
+                        changedTaskIds.add(task.getId());
+                        UUID aiDevId = task.getAssignedDevId();
+                        int aiPoints = task.getStoryPoints();
+                        if (originals.containsKey("assignedDevId")) {
+                            String orig = originals.get("assignedDevId");
+                            if (orig == null || "unassigned".equals(orig)) {
+                                aiDevId = null;
+                            } else {
+                                try { aiDevId = UUID.fromString(orig); } catch (IllegalArgumentException ignored) {}
+                            }
+                        }
+                        if (originals.containsKey("storyPoints")) {
+                            try { aiPoints = Integer.parseInt(originals.get("storyPoints")); } catch (NumberFormatException ignored) {}
+                        }
+                        aiTotalPoints += aiPoints;
+                        aiPlan.add(new TaskDto(
+                            task.getId(), task.getStoryId(), aiDevId, task.getTitle(),
+                            task.getDescription(), task.getAcceptanceCriterion(),
+                            task.getRoleTag(), aiPoints, task.getStatus(),
+                            task.getTrelloCardId(), task.getAssignmentReason(), task.isDeferred()
+                        ));
+                    } else {
+                        aiTotalPoints += task.getStoryPoints();
+                        aiPlan.add(finalTask);
+                    }
+                }
+            }
+        }
+
+        return ResponseEntity.ok(new PlanComparisonResponse(
+            aiPlan, finalPlan, changedTaskIds.size(), finalTotalPoints - aiTotalPoints, changedTaskIds
+        ));
     }
 
     @PostMapping("/{sprintId}/trello-push")
