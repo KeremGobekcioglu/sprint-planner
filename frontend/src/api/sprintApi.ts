@@ -341,6 +341,39 @@ export interface RetrospectiveReport {
   aiAnalysis: string;
 }
 
+export interface PlanComparisonTask {
+  id: string;
+  storyId: string;
+  assignedDevId?: string;
+  title: string;
+  description: string;
+  acceptanceCriterion: string;
+  roleTag: string;
+  storyPoints: number;
+  status: string;
+  trelloCardId?: string;
+  assignmentReason?: string;
+}
+
+export interface PlanComparison {
+  aiPlan: PlanComparisonTask[];
+  finalPlan: PlanComparisonTask[];
+  editCount: number;
+  pointsDelta: number;
+  changedTaskIds: string[];
+}
+
+export const getSprintPlanComparison = async (sprintId: string): Promise<PlanComparison | null> => {
+  if (!USE_REAL_API) return null;
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  try {
+    const response = await api.get<PlanComparison>(`/api/sprints/${canonicalSprintId}/plan/comparison`);
+    return response.data;
+  } catch {
+    return null;
+  }
+};
+
 export const getRetrospectiveReport = async (sprintId: string): Promise<RetrospectiveReport> => {
   const response = await api.get(`/api/sprints/${normalizeSprintId(sprintId)}/retrospective`);
   return response.data as RetrospectiveReport;

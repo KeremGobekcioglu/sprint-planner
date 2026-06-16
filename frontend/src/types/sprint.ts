@@ -38,4 +38,5 @@ export interface Task {
   status: string;
   trelloCardId?: string;
   assignmentReason?: string;
+  deferred?: boolean;
 }
