@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams, Link, useBlocker } from 'react-router-dom';
-import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode, getCarryoverTasks } from '../../api/sprintApi';
+import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode, getCarryoverTasks, parseContext } from '../../api/sprintApi';
 import { getTeam } from '../../api/teamApi';
 import { useQuery } from '@tanstack/react-query';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
@@ -42,6 +42,9 @@ export function PlanningPage() {
   const [blockReleased, setBlockReleased] = useState(false);
   const [previousSprintContext, setPreviousSprintContext] = useState('');
   const [importOpen, setImportOpen] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [codebaseContext, setCodebaseContext] = useState('');
   const [codebaseContextCollapsed, setCodebaseContextCollapsed] = useState(true);
   const codebaseContextInitialized = useRef(false);
@@ -170,6 +173,45 @@ export function PlanningPage() {
       codebaseContextInitialized.current = true;
     }
   }, [planningModeQuery.data]);
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError('');
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext === 'txt' || ext === 'md') {
+      setUploadLoading(true);
+      try {
+        const text = await file.text();
+        setPreviousSprintContext(text);
+      } catch {
+        setUploadError('Could not read the file — paste the content manually instead.');
+      } finally {
+        setUploadLoading(false);
+        e.target.value = '';
+      }
+      return;
+    }
+
+    if (ext === 'pdf' || ext === 'xlsx' || ext === 'xls') {
+      setUploadLoading(true);
+      try {
+        const extracted = await parseContext(file);
+        setPreviousSprintContext(extracted);
+      } catch (err) {
+        setUploadError(err instanceof Error ? err.message : 'Upload failed — paste the content manually instead.');
+      } finally {
+        setUploadLoading(false);
+        e.target.value = '';
+      }
+      return;
+    }
+
+    setUploadError(`Unsupported file type: .${ext}. Use .txt, .md, .pdf, or .xlsx`);
+    e.target.value = '';
+  }
 
   // Result view — shown after successful generation instead of auto-redirect
   if (planResult) {
@@ -456,21 +498,27 @@ const payload: PlanningRequest = {
                     className="w-full resize-y rounded-lg border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-600"
                   />
                   <div>
-                    <label className="mb-1 block text-xs text-slate-400">Or upload a .txt / .md file</label>
+                    <label className="mb-1.5 block text-xs text-slate-400">
+                      Or upload a file (.txt, .md — PDF and Excel require manual paste)
+                    </label>
                     <input
                       type="file"
-                      accept=".txt,.md"
-                      className="text-sm text-slate-400"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (evt) => {
-                          setPreviousSprintContext((evt.target?.result as string) ?? '');
-                        };
-                        reader.readAsText(file);
-                      }}
+                      accept=".txt,.md,.pdf,.xlsx,.xls"
+                      className="hidden"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
                     />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadLoading}
+                      className="rounded-lg border border-slate-500/40 px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800/40 disabled:opacity-50"
+                    >
+                      {uploadLoading ? 'Reading…' : '📎 Upload file'}
+                    </button>
+                    {uploadError && (
+                      <p className="mt-1.5 text-xs text-red-400">{uploadError}</p>
+                    )}
                   </div>
                 </div>
               ) : null}

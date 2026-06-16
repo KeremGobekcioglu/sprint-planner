@@ -1,3 +1,4 @@
+
 package com.sprintplanner.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -63,6 +64,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/sprints")
@@ -623,6 +625,81 @@ public class SprintPlannerController {
                 sprintHistory != null ? sprintHistory : "No history yet",
                 codebaseSection
             );
+    }
+
+    @PostMapping("/parse-context")
+    public ResponseEntity<Map<String, String>> parseContext(
+            @RequestParam("file") MultipartFile file) {
+
+        String filename = file.getOriginalFilename() == null
+                ? "" : file.getOriginalFilename().toLowerCase();
+
+        try {
+            String text;
+            if (filename.endsWith(".pdf")) {
+                text = extractPdf(file.getBytes());
+            } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+                text = extractExcel(file.getInputStream());
+            } else if (filename.endsWith(".txt") || filename.endsWith(".md")) {
+                text = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Unsupported file type. Use .pdf, .xlsx, .xls, .txt, or .md"));
+            }
+
+            if (text == null || text.isBlank()) {
+                String msg = filename.endsWith(".pdf")
+                        ? "This PDF appears to be scanned — no text layer found. Paste the content manually instead."
+                        : "Could not extract text from file — paste the content manually instead.";
+                return ResponseEntity.badRequest().body(Map.of("error", msg));
+            }
+
+            return ResponseEntity.ok(Map.of("text", text.trim()));
+
+        } catch (Exception e) {
+            logger.warn("[PARSE-CONTEXT] Extraction failed for {}: {}", filename, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Extraction failed: " + e.getMessage()));
+        }
+    }
+
+    private String extractPdf(byte[] bytes) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument doc =
+                org.apache.pdfbox.Loader.loadPDF(bytes)) {
+            org.apache.pdfbox.text.PDFTextStripper stripper =
+                    new org.apache.pdfbox.text.PDFTextStripper();
+            return stripper.getText(doc);
+        }
+    }
+
+    private String extractExcel(java.io.InputStream stream) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        try (org.apache.poi.ss.usermodel.Workbook workbook =
+                org.apache.poi.ss.usermodel.WorkbookFactory.create(stream)) {
+            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(i);
+                sb.append("Sheet: ").append(sheet.getSheetName()).append("\n");
+                for (org.apache.poi.ss.usermodel.Row row : sheet) {
+                    StringBuilder rowText = new StringBuilder();
+                    for (org.apache.poi.ss.usermodel.Cell cell : row) {
+                        String val = switch (cell.getCellType()) {
+                            case STRING -> cell.getStringCellValue();
+                            case NUMERIC -> String.valueOf((long) cell.getNumericCellValue());
+                            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+                            default -> "";
+                        };
+                        if (!val.isBlank()) {
+                            rowText.append(val).append("\t");
+                        }
+                    }
+                    if (!rowText.isEmpty()) {
+                        sb.append(rowText.toString().trim()).append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
     }
 
     private UUID normalizeSprintId(String rawSprintId) {

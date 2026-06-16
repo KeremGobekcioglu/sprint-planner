@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Epic } from '../../types/planning';
 
 interface EpicInputProps {
@@ -6,45 +6,34 @@ interface EpicInputProps {
   onChange: (epics: Epic[]) => void;
 }
 
+function parseEpicLine(line: string): Epic | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  // Strip leading number prefix (1. or 1) or Jira prefix ([PROJ-123])
+  const withoutPrefix = trimmed
+    .replace(/^\d+\.\s*/, '')
+    .replace(/^\[\w+-\d+\]\s*/, '');
+
+  // Try delimiters in order of specificity
+  const pipeMatch = withoutPrefix.match(/^(.+?)\s*\|\s*(.+)$/);
+  if (pipeMatch) return { title: pipeMatch[1]!.trim(), description: pipeMatch[2]!.trim() };
+
+  const colonMatch = withoutPrefix.match(/^(.+?)\s*:\s*(.+)$/);
+  if (colonMatch) return { title: colonMatch[1]!.trim(), description: colonMatch[2]!.trim() };
+
+  const dashMatch = withoutPrefix.match(/^(.+?)\s+-\s+(.+)$/);
+  if (dashMatch) return { title: dashMatch[1]!.trim(), description: dashMatch[2]!.trim() };
+
+  // No delimiter — treat whole line as title
+  return { title: withoutPrefix.trim(), description: '' };
+}
+
 export function parsePasteText(text: string): Epic[] {
   return text
     .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line): Epic => {
-      // Strip leading [PROJ-XXX] patterns and numbered list prefixes
-      let cleaned = line
-        .replace(/^\s*\[[^\]]*\]\s*/, '')
-        .replace(/^\s*\d+\.\s*/, '')
-        .trim();
-
-      // Split on first |
-      const pipeIdx = cleaned.indexOf('|');
-      if (pipeIdx !== -1) {
-        return {
-          title: cleaned.slice(0, pipeIdx).trim(),
-          description: cleaned.slice(pipeIdx + 1).trim(),
-        };
-      }
-
-      // Split on first " - " (dash with surrounding spaces)
-      const dashMatch = cleaned.match(/^(.+?) - (.+)$/);
-      if (dashMatch) {
-        return { title: dashMatch[1]!.trim(), description: dashMatch[2]!.trim() };
-      }
-
-      // Split on first ": " (colon space)
-      const colonIdx = cleaned.indexOf(': ');
-      if (colonIdx !== -1) {
-        return {
-          title: cleaned.slice(0, colonIdx).trim(),
-          description: cleaned.slice(colonIdx + 2).trim(),
-        };
-      }
-
-      return { title: cleaned, description: '' };
-    })
-    .filter((epic) => epic.title.length > 0);
+    .map(parseEpicLine)
+    .filter((e): e is Epic => e !== null && e.title.length > 0);
 }
 
 function serializeEpicsToText(epics: Epic[]): string {
@@ -57,6 +46,7 @@ function serializeEpicsToText(epics: Epic[]): string {
 export function EpicInput({ epics, onChange }: EpicInputProps) {
   const [mode, setMode] = useState<'cards' | 'paste'>('cards');
   const [pasteText, setPasteText] = useState('');
+  const parsedPreview = useMemo(() => parsePasteText(pasteText), [pasteText]);
 
   function switchToCards() {
     const parsed = parsePasteText(pasteText);
@@ -158,14 +148,34 @@ export function EpicInput({ epics, onChange }: EpicInputProps) {
           </button>
         </div>
       ) : (
-        <div className="space-y-1">
+        <div className="space-y-2">
           <textarea
             className="h-44 w-full resize-y rounded-xl border border-slate-500/40 bg-slate-950/60 px-3 py-2 text-sm text-slate-200 placeholder-slate-600"
             placeholder={`One epic per line. Supported formats:\nCheckout Flow | Implement checkout with validation\nPayment Integration\n3. Search Autosuggest - Add autosuggest for search\n[PROJ-123] Inventory Sync\nInventory Sync: Background sync with warehouse`}
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
           />
-          <p className="text-xs text-slate-500">Switch to Cards to see parsed results.</p>
+          {pasteText.trim() && (
+            <div className="rounded-lg border border-slate-600/40 bg-slate-950/40 px-3 py-2.5">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Preview — {parsedPreview.length} epic{parsedPreview.length !== 1 ? 's' : ''} parsed
+              </p>
+              {parsedPreview.length === 0 ? (
+                <p className="text-xs text-amber-400">No epics recognised — check your format.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {parsedPreview.map((epic, i) => (
+                    <li key={i} className="text-xs">
+                      <span className="font-medium text-slate-200">{epic.title}</span>
+                      {epic.description && (
+                        <span className="text-slate-500"> — {epic.description}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
