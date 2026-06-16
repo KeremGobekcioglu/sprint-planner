@@ -14,6 +14,9 @@ export function usePlanning(teamId: string | undefined) {
 
   const planMutation = useMutation({
     mutationFn: createSprintPlan,
+    onMutate: () => {
+      queryClient.setQueryData(['planning-status'], []);
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(['sprint', data.sprintId], data);
     },

@@ -155,7 +155,7 @@ export function DashboardPage() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard'],
     queryFn: getDashboardData,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 30,
   });
 
   useEffect(() => {
