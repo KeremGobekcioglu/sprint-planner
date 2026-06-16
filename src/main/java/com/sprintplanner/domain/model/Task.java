@@ -63,6 +63,9 @@ public class Task {
     @Column(name = "assignment_reason", length = 500)
     private String assignmentReason;
 
+    @Column(nullable = false)
+    private boolean deferred = false;
+
     public Task() {}
 
     public Task(UUID id, UUID storyId, UUID assignedDevId, String title, String description,
@@ -95,6 +98,7 @@ public class Task {
     public String getStatus() { return status; }
     public String getTrelloCardId() { return trelloCardId; }
     public String getAssignmentReason() { return assignmentReason; }
+    public boolean isDeferred() { return deferred; }
 
     // ── Setters ──────────────────────────────────────────────────────────────
 
@@ -111,4 +115,5 @@ public class Task {
     public void setStatus(String status) { this.status = status; }
     public void setTrelloCardId(String trelloCardId) { this.trelloCardId = trelloCardId; }
     public void setAssignmentReason(String assignmentReason) { this.assignmentReason = assignmentReason; }
+    public void setDeferred(boolean deferred) { this.deferred = deferred; }
 }

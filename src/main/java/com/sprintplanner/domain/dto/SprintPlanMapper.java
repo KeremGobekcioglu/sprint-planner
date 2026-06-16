@@ -34,7 +34,8 @@ public class SprintPlanMapper {
             task.getStoryPoints(),
             task.getStatus(),
             task.getTrelloCardId(),
-            task.getAssignmentReason()
+            task.getAssignmentReason(),
+            task.isDeferred()
         );
     }
 
@@ -106,6 +107,7 @@ public class SprintPlanMapper {
             dto.trelloCardId()
         );
         task.setAssignmentReason(dto.assignmentReason());
+        task.setDeferred(dto.deferred());
         return task;
     }
 
