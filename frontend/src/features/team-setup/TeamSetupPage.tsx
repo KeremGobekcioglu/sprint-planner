@@ -9,14 +9,13 @@ import { PageLayout } from '../../components/shared/PageLayout';
 import { usePlanningStore } from '../../store/planningStore';
 import type { Team } from '../../types/team';
 import {
-  createDeveloper, createTeam, getTrelloBoards, getTeams, linkTrelloBoard, loadSampleData,
+  createDeveloper, createTeam, getTrelloBoards, linkTrelloBoard,
   getTrelloMembers, linkTrelloMember, updateDeveloper,
 } from '../../api/teamApi';
 import type { TrelloMember } from '../../api/teamApi';
 import type { CapabilityTag } from '../../types/team';
 import { getTrelloStatus } from '../../api/profileApi';
 import { getActiveSprint } from '../../api/sprintApi';
-import { SAMPLE_DEVELOPERS, SAMPLE_TEAMS } from '../../api/sampleData';
 import { DeveloperForm } from './DeveloperForm';
 import { useTeamSetup } from './useTeamSetup';
 import { HelpTooltip } from '../../components/shared/HelpTooltip';
@@ -36,7 +35,6 @@ export function TeamSetupPage() {
   const { setTeam } = usePlanningStore();
   const queryClient = useQueryClient();
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const [trelloBoardInput, setTrelloBoardInput] = useState('');
   const [selectedBoardId, setSelectedBoardId] = useState('');
   const [trelloMembers, setTrelloMembers] = useState<TrelloMember[] | null>(null);
@@ -45,6 +43,8 @@ export function TeamSetupPage() {
   const [editName, setEditName] = useState('');
   const [editRole, setEditRole] = useState('');
   const [editCapabilities, setEditCapabilities] = useState<CapabilityTag[]>([]);
+  const [editSeniority, setEditSeniority] = useState<string>('MID');
+  const SENIORITY_OPTIONS = ['JUNIOR', 'MID', 'SENIOR'] as const;
   const [memoryTeamId, setMemoryTeamId] = useState<string | null>(null);
   const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack'];
   const { teamsQuery, developersQuery, createTeamMutation, createDeveloperMutation, removeDeveloperMutation } =
@@ -88,7 +88,7 @@ export function TeamSetupPage() {
   });
 
   const updateDeveloperMutation = useMutation({
-    mutationFn: ({ devId, payload }: { devId: string; payload: { name: string; role: string; capabilities: string[] } }) =>
+    mutationFn: ({ devId, payload }: { devId: string; payload: { name: string; role: string; capabilities: string[]; seniority?: string } }) =>
       updateDeveloper(selectedTeamId!, devId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['developers', selectedTeamId] });
@@ -139,58 +139,25 @@ export function TeamSetupPage() {
     [teamsQuery.data, selectedTeamId],
   );
 
-  async function handleLoadSamples() {
-    setIsLoadingSamples(true);
-    try {
-      const result = await loadSampleData();
-      await queryClient.invalidateQueries({ queryKey: ['teams'] });
-      await queryClient.invalidateQueries({ queryKey: ['developers'] });
-
-      const refreshedTeams = await queryClient.fetchQuery({ queryKey: ['teams'], queryFn: getTeams });
-      const nextSelected =
-        refreshedTeams.find((team) => team.id === result.firstTeamId) ?? refreshedTeams[0] ?? null;
-
-      setSelectedTeamId(nextSelected?.id ?? null);
-      if (nextSelected) {
-        setTeam(nextSelected.id);
-        await queryClient.invalidateQueries({ queryKey: ['developers', nextSelected.id] });
-      }
-
-      console.log('Sample data loaded successfully', result);
-    } catch (error) {
-      console.error('Error loading sample data:', error);
-    } finally {
-      setIsLoadingSamples(false);
-    }
-  }
-
   return (
     <PageLayout title="Teams" subtitle="Create your team, tune capacity and move into sprint planning.">
-      {activeSprintQuery.data ? (
+      {activeSprintQuery.data && activeSprintQuery.data.status !== 'COMPLETED' ? (
         <div className="mb-4">
           <NoticeBanner
-            title="You have an active sprint"
-            message={`Sprint ${activeSprintQuery.data.sprintId.slice(0, 8)}… is currently ${activeSprintQuery.data.status.toLowerCase().replace('_', ' ')}.`}
-            action={{
-              label: 'Continue review →',
-              onClick: () => navigate(`/sprints/${activeSprintQuery.data!.sprintId}/review`),
-            }}
+            title={activeSprintQuery.data.status === 'ACTIVE' ? 'Sprint in progress' : 'Sprint plan in progress'}
+            message={activeSprintQuery.data.status === 'ACTIVE'
+              ? 'This team has an active sprint running.'
+              : 'A sprint plan is being prepared for this team.'}
+            action={activeSprintQuery.data.status === 'ACTIVE'
+              ? { label: 'Go to Dashboard →', onClick: () => navigate('/dashboard') }
+              : { label: 'View Plan →', onClick: () => navigate(`/sprints/${activeSprintQuery.data!.sprintId}/review`) }}
           />
         </div>
       ) : null}
       <section className="grid gap-6">
         <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-900/50 p-5 shadow-card backdrop-blur-xl">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
             <h2 className="text-xl font-semibold text-slate-100">Create Team</h2>
-            <button
-              type="button"
-              className="w-full rounded-lg bg-blue-500/85 px-3 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-900/30 hover:bg-blue-600/85 disabled:opacity-50 sm:w-auto"
-              onClick={handleLoadSamples}
-              disabled={isLoadingSamples}
-              title="Load 2 sample teams (PayFlow & ShopHub) with developers and realistic epics"
-            >
-              {isLoadingSamples ? 'Loading...' : '⚡ Load Samples'}
-            </button>
           </div>
           <form
             className="grid gap-3 sm:grid-cols-2"
@@ -540,6 +507,25 @@ export function TeamSetupPage() {
                           ))}
                           </div>
                         </div>
+                        <div>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-300">Seniority level</p>
+                          <div className="flex gap-2">
+                            {SENIORITY_OPTIONS.map((level) => (
+                              <button
+                                key={level}
+                                type="button"
+                                className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide ${
+                                  editSeniority === level
+                                    ? 'border-violet-400/60 bg-violet-400/10 text-violet-100'
+                                    : 'border-white/10 text-slate-300'
+                                }`}
+                                onClick={() => setEditSeniority(level)}
+                              >
+                                {level}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <button
                             className="rounded-lg bg-emerald-500/85 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
@@ -547,7 +533,7 @@ export function TeamSetupPage() {
                             onClick={() =>
                               updateDeveloperMutation.mutate({
                                 devId: developer.id,
-                                payload: { name: editName, role: editRole, capabilities: editCapabilities },
+                                payload: { name: editName, role: editRole, capabilities: editCapabilities, seniority: editSeniority },
                               })
                             }
                           >
@@ -573,7 +559,7 @@ export function TeamSetupPage() {
                               {developer.role}
                             </p>
                             <p className="text-xs text-slate-400">
-                              {developer.capabilities?.join(', ') || 'no capabilities'} • Velocity {developer.baseVelocity}
+                              {developer.capabilities?.join(', ') || 'no capabilities'} • {developer.seniority ?? 'MID'} • Velocity {developer.baseVelocity}
                             </p>
                           </div>
                         </div>
@@ -585,6 +571,7 @@ export function TeamSetupPage() {
                               setEditName(developer.name);
                               setEditRole(developer.role);
                               setEditCapabilities((developer.capabilities ?? []) as CapabilityTag[]);
+                              setEditSeniority(developer.seniority ?? 'MID');
                             }}
                           >
                             Edit

@@ -1,0 +1,2 @@
+ALTER TABLE developer
+    ADD COLUMN seniority VARCHAR(20) NOT NULL DEFAULT 'MID';

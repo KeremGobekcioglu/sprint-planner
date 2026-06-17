@@ -190,7 +190,8 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         sb.append("ROLE TAGS: Use only roles that appear in the Capacity Budget by Role section above.\n");
         sb.append("  Do not use a roleTag that has 0pts or no developer coverage.\n");
         sb.append("  If no QA developer exists, fold testing into the implementation task description and acceptance criteria.\n");
-        sb.append("  If a developer has both backend and frontend capabilities, you may assign them a full-stack task.\n\n");
+        sb.append("  If a developer has both backend and frontend capabilities, you may assign them a full-stack task.\n");
+        sb.append("  Use 'ai' for machine learning, recommendation engines, model training, NLP, or data science tasks.\n\n");
 
         sb.append("STORY COUNT: Generate exactly 1 story for EVERY epic in the list above. No epic may be skipped.\n");
         sb.append("  Generate 2 stories for an epic only if it has clearly distinct user-facing and system-level parts.\n\n");
@@ -321,7 +322,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             for (Task task : story.getTasks()) {
                 if (task.getTitle() == null || task.getTitle().isBlank()) return false;
                 if (task.getAcceptanceCriterion() == null || task.getAcceptanceCriterion().isBlank()) return false;
-                if (!List.of("backend", "frontend", "qa", "devops", "android", "ios").contains(task.getRoleTag())) return false;
+                if (!List.of("backend", "frontend", "qa", "devops", "android", "ios", "fullstack", "ai").contains(task.getRoleTag())) return false;
             }
         }
 
@@ -338,7 +339,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                         "description",         Schema.builder().type(Type.Known.STRING).build(),
                         "acceptanceCriterion", Schema.builder().type(Type.Known.STRING).build(),
                         "roleTag",             Schema.builder().type(Type.Known.STRING)
-                                                       .enum_(List.of("backend", "frontend", "qa", "devops", "android", "ios"))
+                                                       .enum_(List.of("backend", "frontend", "qa", "devops", "android", "ios", "fullstack", "ai"))
                                                        .build()
                 ))
                 .required(List.of("title", "description", "acceptanceCriterion", "roleTag"))

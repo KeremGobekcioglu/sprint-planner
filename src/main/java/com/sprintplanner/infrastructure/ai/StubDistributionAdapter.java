@@ -26,8 +26,10 @@ public class StubDistributionAdapter implements DistributionPort {
         Map<UUID, Integer> capacityByDeveloper,
         Map<UUID, List<String>> developerCapabilities,
         Map<UUID, String> developerNames,
+        Map<UUID, String> developerSeniorities,
         String teamProfileMemory,
-        String sprintHistoryMemory
+        String sprintHistoryMemory,
+        boolean shuffle
     ) {
         List<UserStory> userStories = estimatedUserStories == null ? List.of() : estimatedUserStories;
         if (capacityByDeveloper == null || capacityByDeveloper.isEmpty()) {

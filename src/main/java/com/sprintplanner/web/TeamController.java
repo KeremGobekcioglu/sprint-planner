@@ -126,7 +126,8 @@ public class TeamController {
             request.name(),
             request.role(),
             request.capabilities(),
-            request.baseVelocity()
+            request.baseVelocity(),
+            request.seniority()
         );
         return ResponseEntity.ok(DeveloperHttpDto.from(developer));
     }
@@ -139,7 +140,7 @@ public class TeamController {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
         boolean isAdmin = SecurityUtils.isAdmin();
         Developer updated = teamService.updateDeveloper(teamId, currentUserId, isAdmin, devId,
-                request.name(), request.role(), request.capabilities());
+                request.name(), request.role(), request.capabilities(), request.seniority());
         return ResponseEntity.ok(DeveloperHttpDto.from(updated));
     }
 
@@ -414,7 +415,7 @@ public class TeamController {
                 @SuppressWarnings("unchecked")
                 List<String> capabilities = (List<String>) developerValues[2];
                 int baseVelocity = (Integer) developerValues[3];
-                teamService.addDeveloper(team.getId(), currentUserId, isAdmin, developerName, role, capabilities, baseVelocity);
+                teamService.addDeveloper(team.getId(), currentUserId, isAdmin, developerName, role, capabilities, baseVelocity, null);
                 developersCreated++;
             }
         }

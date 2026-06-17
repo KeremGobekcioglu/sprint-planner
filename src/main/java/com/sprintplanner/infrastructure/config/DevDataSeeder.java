@@ -77,23 +77,23 @@ public class DevDataSeeder implements CommandLineRunner {
 
         // Team Orbit — Fintech
         var orbit = teamService.createTeam("Team Orbit", "FINTECH", 10, null, seedUserId);
-        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Jordan Reed", "Senior Backend", List.of("backend"), 8);
-        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Mina Hassan", "DevOps", List.of("devops"), 6);
-        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Satoshi Yamamoto", "Full Stack", List.of("backend", "frontend"), 10);
-        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Dana Kim", "QA Engineer", List.of("qa"), 5);
+        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Jordan Reed", "Senior Backend", List.of("backend"), 8, "SENIOR");
+        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Mina Hassan", "DevOps", List.of("devops"), 6, null);
+        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Satoshi Yamamoto", "Full Stack", List.of("backend", "frontend"), 10, "MID");
+        teamService.addDeveloper(orbit.getId(), seedUserId, true, "Dana Kim", "QA Engineer", List.of("qa"), 5, null);
 
         // Team Atlas — E-Commerce
         var atlas = teamService.createTeam("Team Atlas", "E_COMMERCE", 14, null, seedUserId);
-        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Ava Chen", "Senior Backend", List.of("backend"), 9);
-        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Marco Silva", "Frontend Engineer", List.of("frontend"), 6);
-        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Priya Nair", "QA Engineer", List.of("qa"), 4);
+        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Ava Chen", "Senior Backend", List.of("backend"), 9, "SENIOR");
+        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Marco Silva", "Frontend Engineer", List.of("frontend"), 6, null);
+        teamService.addDeveloper(atlas.getId(), seedUserId, true, "Priya Nair", "QA Engineer", List.of("qa"), 4, null);
 
         // Team Pulse — Mobile/Generic
         var pulse = teamService.createTeam("Team Pulse", "GENERIC", 14, null, seedUserId);
-        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Elena Rodriguez", "Android Engineer", List.of("android"), 7);
-        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Kofi Mensah", "iOS Engineer", List.of("ios"), 6);
-        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Sarah Jenkins", "QA Engineer", List.of("qa"), 5);
-        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Alex Volkov", "Backend Engineer", List.of("backend"), 8);
+        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Elena Rodriguez", "Android Engineer", List.of("android"), 7, null);
+        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Kofi Mensah", "iOS Engineer", List.of("ios"), 6, null);
+        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Sarah Jenkins", "QA Engineer", List.of("qa"), 5, null);
+        teamService.addDeveloper(pulse.getId(), seedUserId, true, "Alex Volkov", "Backend Engineer", List.of("backend"), 8, null);
     }
 
     private void backfillMissingCapabilities() {

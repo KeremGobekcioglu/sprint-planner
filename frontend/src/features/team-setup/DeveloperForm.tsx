@@ -11,11 +11,13 @@ interface DeveloperFormValues {
 }
 
 interface DeveloperFormProps {
-  onSubmit: (values: { name: string; role: string; capabilities: CapabilityTag[]; baseVelocity: number }) => void;
+  onSubmit: (values: { name: string; role: string; capabilities: CapabilityTag[]; baseVelocity: number; seniority: string }) => void;
   isSubmitting: boolean;
 }
 
-const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack'];
+const SENIORITY_OPTIONS = ['JUNIOR', 'MID', 'SENIOR'] as const;
+
+const COMMON_CAPABILITIES: CapabilityTag[] = ['backend', 'frontend', 'qa', 'devops', 'android', 'ios', 'fullstack', 'ai'];
 
 function normalizeCapabilities(values: string[]): CapabilityTag[] {
   const normalized: CapabilityTag[] = [];
@@ -38,6 +40,7 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
     },
   });
   const [selectedCapabilities, setSelectedCapabilities] = useState<CapabilityTag[]>(['backend']);
+  const [seniority, setSeniority] = useState<string>('MID');
 
   const capabilityOptions = useMemo(() => COMMON_CAPABILITIES, []);
 
@@ -52,9 +55,11 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
           role: values.role,
           capabilities: merged,
           baseVelocity: values.baseVelocity,
+          seniority,
         });
         reset();
         setSelectedCapabilities(['backend']);
+        setSeniority('MID');
       })}
     >
       {/* Name */}
@@ -103,6 +108,28 @@ export function DeveloperForm({ onSubmit, isSubmitting }: DeveloperFormProps) {
         </div>
         {/* capabilitiesText kept for submission logic — input not rendered */}
         <input type="hidden" {...register('capabilitiesText')} />
+      </div>
+
+      {/* Seniority */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Seniority level</p>
+        <p className="mt-0.5 text-xs text-slate-400">Used to match complex tasks to senior developers.</p>
+        <div className="mt-2 flex gap-2">
+          {SENIORITY_OPTIONS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              className={`rounded-full border px-3 py-1 text-xs uppercase tracking-wide ${
+                seniority === level
+                  ? 'border-violet-400/60 bg-violet-400/10 text-violet-100'
+                  : 'border-white/10 text-slate-300'
+              }`}
+              onClick={() => setSeniority(level)}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Job title + Velocity — side by side */}

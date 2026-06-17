@@ -33,9 +33,13 @@ public class Developer {
     @Column(nullable = false)
     private String name;
 
-    /** backend | frontend | qa | devops | android | ios | fullstack | custom */
+    /** backend | frontend | qa | devops | android | ios | fullstack | ai | custom */
     @Column(nullable = false)
     private String role;
+
+    /** JUNIOR | MID | SENIOR — used for seniority-aware task distribution. */
+    @Column(nullable = false)
+    private String seniority = "MID";
 
     @Column(name = "capabilities")
     private String capabilities;
@@ -65,6 +69,7 @@ public class Developer {
     public Team getTeam() { return team; }
     public String getName() { return name; }
     public String getRole() { return role; }
+    public String getSeniority() { return seniority != null ? seniority : "MID"; }
     public int getBaseVelocity() { return baseVelocity; }
     public String getCapabilitiesRaw() { return capabilities; }
 
@@ -91,6 +96,7 @@ public class Developer {
     public void setTeam(Team team) { this.team = team; }
     public void setName(String name) { this.name = name; }
     public void setRole(String role) { this.role = role; }
+    public void setSeniority(String seniority) { this.seniority = seniority != null ? seniority.toUpperCase() : "MID"; }
     public void setBaseVelocity(int baseVelocity) { this.baseVelocity = baseVelocity; }
     public String getTrelloMemberId() { return trelloMemberId; }
     public void setTrelloMemberId(String trelloMemberId) { this.trelloMemberId = trelloMemberId; }

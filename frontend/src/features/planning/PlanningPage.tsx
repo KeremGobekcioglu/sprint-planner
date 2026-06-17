@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams, Link, useBlocker } from 'react-router-dom';
-import { getMockPlanningDefaults, getSampleEpicsForPlanning, getPlanningMode, getCarryoverTasks, parseContext } from '../../api/sprintApi';
+import { getMockPlanningDefaults, getPlanningMode, getCarryoverTasks, parseContext, redistributePlan } from '../../api/sprintApi';
 import { getTeam } from '../../api/teamApi';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
 import { LoadingSpinner } from '../../components/shared/LoadingSpinner';
 import { PageLayout } from '../../components/shared/PageLayout';
@@ -37,7 +38,6 @@ export function PlanningPage() {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const { setSprint, setTeam, setConfidence } = usePlanningStore();
-  const [isLoadingSamples, setIsLoadingSamples] = useState(false);
   const [planResult, setPlanResult] = useState<SprintPlanWithId | null>(null);
   const [blockReleased, setBlockReleased] = useState(false);
   const [previousSprintContext, setPreviousSprintContext] = useState('');
@@ -51,6 +51,9 @@ export function PlanningPage() {
   const [epics, setEpics] = useState<Epic[]>([{ title: '', description: '' }]);
   const [epicError, setEpicError] = useState('');
   const [selectedCarryoverIds, setSelectedCarryoverIds] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const [reshuffleDialogOpen, setReshuffleDialogOpen] = useState(false);
+  const [reshuffling, setReshuffling] = useState(false);
   const { developersQuery, planMutation, planningSteps } = usePlanning(teamId);
   const planningModeQuery = useQuery({
     queryKey: ['planningMode', teamId],
@@ -70,6 +73,23 @@ export function PlanningPage() {
     queryFn: () => getTeam(teamId as string),
     enabled: Boolean(teamId),
     staleTime: Infinity,
+  });
+
+  const reshuffleMutation = useMutation({
+    mutationFn: () => redistributePlan(planResult!.sprintId),
+    onMutate: () => {
+      setReshuffling(true);
+      setReshuffleDialogOpen(false);
+    },
+    onSuccess: (newPlan) => {
+      queryClient.setQueryData(
+        ['sprint', planResult?.sprintId, 'plan'],
+        newPlan
+      );
+      setPlanResult((prev) => prev ? { ...newPlan, sprintId: prev.sprintId } : prev);
+      setReshuffling(false);
+    },
+    onError: () => setReshuffling(false),
   });
 
   const modeData = planningModeQuery.data as any;
@@ -295,6 +315,34 @@ export function PlanningPage() {
           </div>
 
           {planResult.confidence && <ConfidenceForecast forecast={planResult.confidence} />}
+
+          {planResult.sprintStatus === 'PLANNING' && (
+            <div className="flex flex-col items-start gap-1">
+              <button
+                type="button"
+                onClick={() => setReshuffleDialogOpen(true)}
+                disabled={reshuffling}
+                className="rounded-lg border border-slate-500/40 px-4 py-2 text-sm
+                  font-medium text-slate-300 hover:bg-slate-800/40
+                  disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {reshuffling ? '🔀 Reshuffling...' : '🔀 Try Different Distribution'}
+              </button>
+              <p className="text-xs text-slate-500 pl-1">
+                Keeps stories and estimates — only reassigns developers.
+              </p>
+            </div>
+          )}
+
+          <ConfirmDialog
+            open={reshuffleDialogOpen}
+            title="Try Different Distribution?"
+            message="This will reassign all tasks to different developers using a new AI distribution run. Your stories and story point estimates will not change. You can reshuffle again if you don't like the result."
+            confirmLabel="Reshuffle"
+            cancelLabel="Cancel"
+            onConfirm={() => reshuffleMutation.mutate()}
+            onCancel={() => setReshuffleDialogOpen(false)}
+          />
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -552,31 +600,7 @@ const payload: PlanningRequest = {
           </div>
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-100">Epics</p>
-
-              <button
-                type="button"
-                className="min-h-[44px] rounded-lg bg-blue-500/85 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600/85 disabled:opacity-50"
-                onClick={async () => {
-                  if (!teamId) return;
-                  setIsLoadingSamples(true);
-                  try {
-                    const defaults = await getSampleEpicsForPlanning(teamId);
-                    if (defaults.epicsText) {
-                      setEpics(parsePasteText(defaults.epicsText));
-                    }
-                    form.setValue('sprintGoal', defaults.sprintGoal);
-                  } finally {
-                    setIsLoadingSamples(false);
-                  }
-                }}
-                disabled={isLoadingSamples}
-                title="Load sample epics for this team"
-              >
-                {isLoadingSamples ? 'Loading...' : '⚡ Load Samples'}
-              </button>
-            </div>
+            <p className="mb-2 text-sm font-semibold text-slate-100">Epics</p>
             <EpicInput epics={epics} onChange={setEpics} />
             {epicError && <p className="mt-1 text-xs text-red-400">{epicError}</p>}
           </div>

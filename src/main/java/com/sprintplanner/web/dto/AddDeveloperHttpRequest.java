@@ -6,6 +6,7 @@ public record AddDeveloperHttpRequest(
     String name,
     String role,
     List<String> capabilities,
-    int baseVelocity
+    int baseVelocity,
+    String seniority
 ) {
 }

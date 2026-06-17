@@ -14,6 +14,7 @@ export interface DeveloperCreateRequest {
   role: Developer['role'];
   capabilities: Developer['capabilities'];
   baseVelocity: number;
+  seniority?: string;
 }
 
 const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
@@ -151,6 +152,7 @@ function createMockDeveloper(teamId: string, payload: DeveloperCreateRequest): D
     role: payload.role,
     capabilities: payload.capabilities,
     baseVelocity: payload.baseVelocity,
+    seniority: payload.seniority ?? 'MID',
   };
 
   const nextDevelopers = [...getMockDevelopers(), developer];
@@ -234,6 +236,7 @@ export interface DeveloperUpdateRequest {
   name: string;
   role: string;
   capabilities: string[];
+  seniority?: string;
 }
 
 export const updateDeveloper = (teamId: string, devId: string, payload: DeveloperUpdateRequest): Promise<Developer> =>

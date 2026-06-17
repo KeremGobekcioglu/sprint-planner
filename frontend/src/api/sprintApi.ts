@@ -317,6 +317,11 @@ export const getCarryoverTasks = async (teamId: string): Promise<CarryoverTask[]
   return response.data;
 };
 
+export async function redistributePlan(sprintId: string): Promise<SprintPlan> {
+  const response = await api.post<SprintPlan>(`/sprints/${normalizeSprintId(sprintId)}/redistribute`);
+  return response.data;
+}
+
 export const getTaskGuidance = async (sprintId: string, taskId: string) => {
   const response = await api.post(`/api/sprints/${normalizeSprintId(sprintId)}/tasks/${taskId}/guidance`);
   return response.data as { hints: string; suggestedApproach: string; riskFlags: string[] };
@@ -353,6 +358,7 @@ export interface PlanComparisonTask {
   status: string;
   trelloCardId?: string;
   assignmentReason?: string;
+  deferred?: boolean;
 }
 
 export interface PlanComparison {

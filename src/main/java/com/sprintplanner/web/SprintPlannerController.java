@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sprintplanner.application.ConfidenceCalculator;
 import com.sprintplanner.application.PreferenceService;
+import com.sprintplanner.application.RedistributeService;
 import com.sprintplanner.application.RetrospectiveService;
 import com.sprintplanner.application.SprintReviewService;
 import org.slf4j.Logger;
@@ -91,6 +92,7 @@ public class SprintPlannerController {
     private final ConfidenceCalculator confidenceCalculator;
     private final RetrospectiveService retrospectiveService;
     private final SprintReviewService sprintReviewService;
+    private final RedistributeService redistributeService;
 
     public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository,
             MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository,
@@ -99,7 +101,8 @@ public class SprintPlannerController {
             JpaUserRepository userRepository, TaskJpaRepository taskJpaRepository,
             GeminiClientProvider geminiClientProvider, ObjectMapper objectMapper,
             ConfidenceCalculator confidenceCalculator, RetrospectiveService retrospectiveService,
-            SprintReviewService sprintReviewService) {
+            SprintReviewService sprintReviewService,
+            RedistributeService redistributeService) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
         this.memoryReader = memoryReader;
@@ -116,6 +119,7 @@ public class SprintPlannerController {
         this.confidenceCalculator = confidenceCalculator;
         this.retrospectiveService = retrospectiveService;
         this.sprintReviewService = sprintReviewService;
+        this.redistributeService = redistributeService;
     }
 
     @PostMapping("/plan")
@@ -523,6 +527,17 @@ public class SprintPlannerController {
             logger.warn("[RETROSPECTIVE] Failed to cache after on-demand generation for sprint {}: {}", normalizedId, e.getMessage());
         }
         return ResponseEntity.ok(report);
+    }
+
+    @PostMapping("/{sprintId}/redistribute")
+    public ResponseEntity<SprintPlan> redistributeSprint(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        SprintPlan plan = redistributeService.redistribute(normalizedSprintId);
+        SprintPlan planWithStatus = new SprintPlan(
+            plan.teamId(), plan.sprintGoal(), plan.userStories(),
+            plan.unassignedTasks(), "PLANNING", plan.confidence()
+        );
+        return ResponseEntity.ok(planWithStatus);
     }
 
     @DeleteMapping("/{sprintId}")

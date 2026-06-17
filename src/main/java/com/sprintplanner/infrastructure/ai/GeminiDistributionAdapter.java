@@ -23,6 +23,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
     private static final Logger logger = LoggerFactory.getLogger(GeminiDistributionAdapter.class);
     private static final int SOLE_CAPABILITY_OVERFLOW_BUFFER_PTS = 2;
+    private static final double UNDERUTILIZED_THRESHOLD = 0.50;
     public static final String CARRYOVER_EPIC_TITLE = "Carry-over from previous sprint";
 
     private final GeminiClientProvider gemini;
@@ -41,8 +42,10 @@ public class GeminiDistributionAdapter implements DistributionPort {
             Map<UUID, Integer> capacityByDeveloper,
             Map<UUID, List<String>> developerCapabilities,
             Map<UUID, String> developerNames,
+            Map<UUID, String> developerSeniorities,
             String teamProfileMemory,
-            String sprintHistoryMemory
+            String sprintHistoryMemory,
+            boolean shuffle
     ) {
         if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
             logger.info("[DISTRIBUTION] Team profile memory loaded ({} chars): ...{}",
@@ -76,13 +79,16 @@ public class GeminiDistributionAdapter implements DistributionPort {
             return convertToSprintPlan(teamId, sprintGoal, estimatedUserStories, List.of());
         }
 
+        Map<UUID, String> seniorities = developerSeniorities != null ? developerSeniorities : Map.of();
+
         String prompt = buildPrompt(
                 estimatedUserStories, capacityByDeveloper, developerCapabilities,
-                developerNames, teamProfileMemory, sprintHistoryMemory
+                developerNames, teamProfileMemory, sprintHistoryMemory, shuffle
         );
 
         Schema schema = buildDistributionSchema();
-        String raw = gemini.generate(prompt, 0.3f, GeminiClientProvider.MODEL_DISTRIBUTION, schema);
+        float temperature = shuffle ? 0.7f : 0.3f;
+        String raw = gemini.generate(prompt, temperature, GeminiClientProvider.MODEL_DISTRIBUTION, schema);
 
         Map<UUID, Integer> remaining = new LinkedHashMap<>(capacityByDeveloper);
 
@@ -90,12 +96,16 @@ public class GeminiDistributionAdapter implements DistributionPort {
             estimatedUserStories,
             remaining,
             developerCapabilities,
+            seniorities,
             raw
         );
 
         // Validate and rebalance after distribution
         List<Task> rebalanced = validateAndRebalance(estimatedUserStories, remaining, developerCapabilities);
         unassignedTasks.addAll(rebalanced);
+
+        rebalanceAfterDistribution(estimatedUserStories, remaining,
+            capacityByDeveloper, developerCapabilities, seniorities);
 
         // Log summary
         int totalTasks = estimatedUserStories.stream()
@@ -158,7 +168,8 @@ public class GeminiDistributionAdapter implements DistributionPort {
             Map<UUID, List<String>> developerCapabilities,
             Map<UUID, String> developerNames,
             String teamProfile,
-            String sprintHistory
+            String sprintHistory,
+            boolean shuffle
     ) {
         StringBuilder sb = new StringBuilder();
 
@@ -201,6 +212,16 @@ public class GeminiDistributionAdapter implements DistributionPort {
                     .append(teamProfile).append("\n\n");
         }
 
+        if (shuffle) {
+            sb.append("## Reshuffle Instruction\n");
+            sb.append("Produce a DIFFERENT distribution than you would by default.\n");
+            sb.append("Deliberately vary your preference rankings — if you would\n");
+            sb.append("normally rank developer A first for a task, consider ranking\n");
+            sb.append("developer B first instead, as long as they have matching\n");
+            sb.append("capability and reasonable capacity.\n");
+            sb.append("The goal is to explore an alternative valid assignment.\n\n");
+        }
+
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a valid JSON array. No explanation, no markdown, no backticks.\n");
         sb.append("For each task, return a ranked list of developer preferences — best fit first.\n");
@@ -228,6 +249,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             List<UserStory> stories,
             Map<UUID, Integer> remaining,
             Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerSeniorities,
             String raw
     ) {
         Map<String, Task> taskById = new HashMap<>();
@@ -255,12 +277,18 @@ public class GeminiDistributionAdapter implements DistributionPort {
             String taskIdStr = task.getId().toString();
             List<UUID> preferredDevs = preferencesByTaskId.getOrDefault(taskIdStr, List.of());
 
-            UUID assigned = findBestDeveloper(task, preferredDevs, remaining, developerCapabilities, allTasks);
+            UUID assigned = findBestDeveloper(task, preferredDevs, remaining, developerCapabilities, developerSeniorities, allTasks);
 
             if (assigned != null) {
                 task.setAssignedDevId(assigned);
                 remaining.merge(assigned, -task.getStoryPoints(), Integer::sum);
-                task.setAssignmentReason(buildReason(task, assigned, preferredDevs));
+                String reason = buildReason(task, assigned, preferredDevs);
+                String seniority = developerSeniorities.getOrDefault(assigned, "MID");
+                if (!isSeniorityAppropriate(seniority, task.getStoryPoints())) {
+                    reason += " ⚠ Assigned to " + seniority.toLowerCase() + " developer — no " +
+                        (task.getStoryPoints() >= 8 ? "senior" : "senior/mid") + " available for high-complexity task";
+                }
+                task.setAssignmentReason(reason);
             } else {
                 task.setAssignedDevId(null);
                 task.setAssignmentReason(buildUnassignedReason(task, developerCapabilities));
@@ -279,11 +307,17 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         for (Task task : secondPassTasks) {
             List<UUID> prefs = preferencesByTaskId.getOrDefault(task.getId().toString(), List.of());
-            UUID assigned = findBestDeveloper(task, prefs, remaining, developerCapabilities, allTasks);
+            UUID assigned = findBestDeveloper(task, prefs, remaining, developerCapabilities, developerSeniorities, allTasks);
             if (assigned != null) {
                 task.setAssignedDevId(assigned);
                 remaining.merge(assigned, -task.getStoryPoints(), Integer::sum);
-                task.setAssignmentReason(buildReason(task, assigned, prefs) + " (gap fill)");
+                String reason = buildReason(task, assigned, prefs) + " (gap fill)";
+                String seniority = developerSeniorities.getOrDefault(assigned, "MID");
+                if (!isSeniorityAppropriate(seniority, task.getStoryPoints())) {
+                    reason += " ⚠ Assigned to " + seniority.toLowerCase() + " developer — no " +
+                        (task.getStoryPoints() >= 8 ? "senior" : "senior/mid") + " available for high-complexity task";
+                }
+                task.setAssignmentReason(reason);
             } else {
                 stillUnassigned.add(task);
             }
@@ -326,6 +360,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             List<UUID> preferredDevs,
             Map<UUID, Integer> remaining,
             Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerSeniorities,
             List<Task> allTasks) {
 
         String roleTag = normalizeRole(task.getRoleTag());
@@ -345,20 +380,32 @@ public class GeminiDistributionAdapter implements DistributionPort {
             }
         }
 
-        // Step 2: Try any developer with matching capability and enough capacity
+        // Step 2: Try any developer with matching capability and enough capacity.
+        // Prefer seniority-appropriate developers; only fall back to others if no appropriate dev has capacity.
         if (assigned == null) {
-            int bestRemaining = Integer.MIN_VALUE;
+            UUID seniorityBest = null;
+            int seniorityBestCap = Integer.MIN_VALUE;
+            UUID anyBest = null;
+            int anyBestCap = Integer.MIN_VALUE;
             for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
                 UUID devId = entry.getKey();
-                if (protectedDevs.contains(devId)) continue; // skip — has unmet sole-capability tasks
+                if (protectedDevs.contains(devId)) continue;
                 boolean hasCapability = entry.getValue().stream()
                     .anyMatch(c -> normalizeRole(c).equals(roleTag));
                 int cap = remaining.getOrDefault(devId, 0);
-                if (hasCapability && cap >= needed && cap > bestRemaining) {
-                    assigned = devId;
-                    bestRemaining = cap;
+                if (hasCapability && cap >= needed) {
+                    String seniority = developerSeniorities.getOrDefault(devId, "MID");
+                    if (isSeniorityAppropriate(seniority, task.getStoryPoints()) && cap > seniorityBestCap) {
+                        seniorityBest = devId;
+                        seniorityBestCap = cap;
+                    }
+                    if (cap > anyBestCap) {
+                        anyBest = devId;
+                        anyBestCap = cap;
+                    }
                 }
             }
+            assigned = seniorityBest != null ? seniorityBest : anyBest;
         }
 
         // Step 2b: Assign over capacity to best available capable developer
@@ -429,6 +476,12 @@ public class GeminiDistributionAdapter implements DistributionPort {
         return assigned;
     }
 
+    private boolean isSeniorityAppropriate(String seniority, int points) {
+        if (points >= 8) return "SENIOR".equals(seniority);
+        if (points == 5) return !"JUNIOR".equals(seniority);
+        return true; // <= 3 pts: anyone
+    }
+
     private UUID findCrossCapabilityFallback(
             String roleTag,
             int needed,
@@ -441,6 +494,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             case "devops" -> List.of("backend", "fullstack");
             case "android" -> List.of("frontend", "fullstack", "backend");
             case "ios" -> List.of("frontend", "fullstack", "backend");
+            case "ai" -> List.of("backend", "fullstack");
             default -> List.of();
         };
 
@@ -570,6 +624,75 @@ public class GeminiDistributionAdapter implements DistributionPort {
             return "";
         }
         return role.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private void rebalanceAfterDistribution(
+            List<UserStory> stories,
+            Map<UUID, Integer> remaining,
+            Map<UUID, Integer> totalCapacity,
+            Map<UUID, List<String>> developerCapabilities,
+            Map<UUID, String> developerSeniority) {
+
+        List<UUID> underutilized = totalCapacity.entrySet().stream()
+            .filter(e -> {
+                int total = e.getValue();
+                if (total <= 0) return false;
+                int used = total - remaining.getOrDefault(e.getKey(), 0);
+                return (double) used / total <= UNDERUTILIZED_THRESHOLD;
+            })
+            .map(Map.Entry::getKey)
+            .toList();
+
+        if (underutilized.isEmpty()) return;
+
+        List<Task> allTasks = stories.stream()
+            .flatMap(s -> s.getTasks() == null ? java.util.stream.Stream.empty()
+                : s.getTasks().stream())
+            .filter(t -> t.getAssignedDevId() != null)
+            .filter(t -> t.getAssignmentReason() == null
+                || !t.getAssignmentReason().startsWith("Carry-over"))
+            .collect(Collectors.toList());
+
+        for (Task task : allTasks) {
+            UUID giverDev = task.getAssignedDevId();
+            if (giverDev == null) continue;
+            if (remaining.getOrDefault(giverDev, 0) >= 0) continue;
+
+            String taskRole = normalizeRole(task.getRoleTag());
+            int taskPoints = Math.max(1, task.getStoryPoints());
+
+            List<UUID> candidates = underutilized.stream()
+                .filter(dev -> !dev.equals(giverDev))
+                .filter(dev -> developerCapabilities.getOrDefault(dev, List.of())
+                    .stream().map(this::normalizeRole).anyMatch(c -> c.equals(taskRole)))
+                .filter(dev -> remaining.getOrDefault(dev, 0) >= taskPoints)
+                .toList();
+
+            if (candidates.isEmpty()) continue;
+
+            UUID chosen = candidates.stream()
+                .filter(dev -> isSeniorityAppropriate(
+                    developerSeniority.getOrDefault(dev, "MID"), taskPoints))
+                .findFirst()
+                .orElse(candidates.get(0));
+
+            boolean seniorityMismatch = !isSeniorityAppropriate(
+                developerSeniority.getOrDefault(chosen, "MID"), taskPoints);
+
+            UUID previousDev = giverDev;
+            task.setAssignedDevId(chosen);
+            task.setAssignmentReason(seniorityMismatch
+                ? "Rebalanced — moved to underutilized developer (no seniority-appropriate developer available)"
+                : "Rebalanced — moved from over-capacity developer to underutilized " + task.getRoleTag() + " developer");
+            remaining.merge(giverDev, taskPoints, Integer::sum);
+            remaining.merge(chosen, -taskPoints, Integer::sum);
+
+            logger.info("[DISTRIBUTION] Rebalance: {} task ({}pts) moved from {} to {}{}",
+                task.getRoleTag(), taskPoints,
+                previousDev.toString().substring(0, 8),
+                chosen.toString().substring(0, 8),
+                seniorityMismatch ? " (seniority mismatch — flagged)" : "");
+        }
     }
 
     // ── Structured output schema ──────────────────────────────────────────────

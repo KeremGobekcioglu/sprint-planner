@@ -47,13 +47,14 @@ public class TeamService {
         return isAdmin ? teamRepository.findAll() : teamRepository.findByOwnerId(currentUserId);
     }
 
-    public Developer addDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, String name, String role, List<String> capabilities, int baseVelocity) {
+    public Developer addDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, String name, String role, List<String> capabilities, int baseVelocity, String seniority) {
         Team team = getTeam(teamId, currentUserId, isAdmin);
         Developer developer = new Developer(UUID.randomUUID(), team.getId(), name, role, baseVelocity);
         List<String> resolvedCapabilities = (capabilities == null || capabilities.isEmpty())
             ? CapabilityInferenceService.inferFromRole(role)
             : capabilities;
         developer.setCapabilities(resolvedCapabilities);
+        developer.setSeniority(seniority != null && !seniority.isBlank() ? seniority : "MID");
         return developerRepository.save(developer);
     }
 
@@ -63,7 +64,7 @@ public class TeamService {
     }
 
     public Developer updateDeveloper(UUID teamId, UUID currentUserId, boolean isAdmin, UUID developerId,
-            String name, String role, List<String> capabilities) {
+            String name, String role, List<String> capabilities, String seniority) {
         getTeam(teamId, currentUserId, isAdmin);
         Developer developer = developerRepository.findById(developerId)
             .orElseThrow(() -> new IllegalArgumentException("Developer not found: " + developerId));
@@ -76,6 +77,9 @@ public class TeamService {
             ? CapabilityInferenceService.inferFromRole(role)
             : capabilities;
         developer.setCapabilities(resolvedCapabilities);
+        if (seniority != null && !seniority.isBlank()) {
+            developer.setSeniority(seniority);
+        }
         return developerRepository.save(developer);
     }
 

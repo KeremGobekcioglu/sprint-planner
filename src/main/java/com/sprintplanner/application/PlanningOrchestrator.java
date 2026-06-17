@@ -130,6 +130,14 @@ public class PlanningOrchestrator implements PlanningInputPort {
                     java.util.LinkedHashMap::new
                 ));
 
+            Map<UUID, String> developerSeniorities = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Developer::getId,
+                    dev -> dev.getSeniority() != null ? dev.getSeniority() : "MID",
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
             push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
             Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
                 developers,
@@ -246,8 +254,10 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 capacityForDistribution,
                 developerCapabilities,
                 developerNames,
+                developerSeniorities,
                 teamProfileMemory,
-                effectiveSprintHistory
+                effectiveSprintHistory,
+                false
             );
             log.info("[Planning] teamId={} — distribution done", request.teamId());
 

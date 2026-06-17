@@ -18,7 +18,9 @@ public interface DistributionPort {
         Map<UUID, Integer> capacityByDeveloper,
         Map<UUID, List<String>> developerCapabilities,
         Map<UUID, String> developerNames,
+        Map<UUID, String> developerSeniorities,
         String teamProfileMemory,
-        String sprintHistoryMemory
+        String sprintHistoryMemory,
+        boolean shuffle
     );
 }
