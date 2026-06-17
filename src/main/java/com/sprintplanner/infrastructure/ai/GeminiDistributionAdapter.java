@@ -366,6 +366,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
             int bestRemaining = Integer.MIN_VALUE;
             for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
                 UUID devId = entry.getKey();
+                if (protectedDevs.contains(devId)) continue; // skip — has unmet sole-capability tasks
                 boolean hasCapability = entry.getValue().stream()
                     .anyMatch(c -> normalizeRole(c).equals(roleTag));
                 int cap = remaining.getOrDefault(devId, 0);
@@ -512,14 +513,15 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
         Set<UUID> protected_ = new HashSet<>();
 
-        // Find capabilities covered by exactly one developer
+        // Find capabilities covered by exactly one developer.
+        // Use put(null) on conflict so odd-count repetitions don't re-enter the map.
         Map<String, UUID> soleDeveloperByCapability = new HashMap<>();
         for (Map.Entry<UUID, List<String>> entry : developerCapabilities.entrySet()) {
             for (String cap : entry.getValue()) {
                 String normalized = normalizeRole(cap);
                 if (soleDeveloperByCapability.containsKey(normalized)) {
-                    // More than one developer has this capability — not sole
-                    soleDeveloperByCapability.remove(normalized);
+                    // More than one developer has this capability — mark as null (not sole)
+                    soleDeveloperByCapability.put(normalized, null);
                 } else {
                     soleDeveloperByCapability.put(normalized, entry.getKey());
                 }
@@ -529,6 +531,7 @@ public class GeminiDistributionAdapter implements DistributionPort {
         // For each sole-capability developer, check if their sole capability
         // still has unassigned tasks remaining
         for (Map.Entry<String, UUID> entry : soleDeveloperByCapability.entrySet()) {
+            if (entry.getValue() == null) continue; // not sole — multiple devs have this capability
             String soleCapability = entry.getKey();
             UUID soleDev = entry.getValue();
 
@@ -542,6 +545,10 @@ public class GeminiDistributionAdapter implements DistributionPort {
 
             if (hasUnmetTasks) {
                 protected_.add(soleDev);
+                logger.info("[DISTRIBUTION] Sole-capability protection: {} is sole {} developer — " +
+                    "protecting from {} tasks until {} tasks are assigned",
+                    soleDev.toString().substring(0, 8), soleCapability,
+                    currentRoleTag, soleCapability);
             }
         }
 

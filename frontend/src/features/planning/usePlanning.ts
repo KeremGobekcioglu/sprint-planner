@@ -33,12 +33,23 @@ export function usePlanning(teamId: string | undefined) {
     staleTime: 0,
   });
 
+  const rawSteps = statusQuery.data ?? [];
+  // While the mutation is still pending, a completed "done" step means we're seeing stale
+  // data from the previous run (the status poll raced the backend's start() call).
+  // Return [] until the fresh run's own steps arrive.
+  const planningSteps =
+    planMutation.isIdle
+      ? []
+      : planMutation.isPending && rawSteps.some((s) => s.done)
+        ? []
+        : rawSteps;
+
   return {
     developersQuery,
     planMutation: {
       ...planMutation,
       submittedAt: planMutation.submittedAt ?? null,
     },
-    planningSteps: planMutation.isIdle ? [] : (statusQuery.data ?? []),
+    planningSteps,
   };
 }

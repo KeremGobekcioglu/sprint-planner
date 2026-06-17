@@ -112,10 +112,31 @@ export function ReviewPage() {
     return map;
   }, [comparison]);
 
-  const changedTaskIds = useMemo(
-    () => new Set(comparison?.changedTaskIds ?? []),
-    [comparison],
-  );
+  const allTasksById = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const task of allTasks) map.set(task.id, task);
+    return map;
+  }, [allTasks]);
+
+  const changedTaskIds = useMemo(() => {
+    if (!comparison) return new Set<string>();
+    const changed = new Set<string>();
+    for (const aiTask of comparison.aiPlan) {
+      const current = allTasksById.get(aiTask.id);
+      if (!current) continue;
+      const currentDevId = overrides[aiTask.id] ?? current.assignedDevId;
+      const currentPoints = storyPointOverrides[aiTask.id] ?? current.storyPoints;
+      const currentDeferred = isDeferred(aiTask.id);
+      if (
+        currentDevId !== aiTask.assignedDevId ||
+        currentPoints !== aiTask.storyPoints ||
+        currentDeferred !== (aiTask.deferred ?? false)
+      ) {
+        changed.add(aiTask.id);
+      }
+    }
+    return changed;
+  }, [comparison, overrides, storyPointOverrides, allTasksById, isDeferred]);
 
   const carryoverCount = useMemo(() => {
     const plan = planQuery.data;
@@ -332,16 +353,26 @@ export function ReviewPage() {
                           </p>
                           <div className="space-y-0.5 pl-3">
                             {story.tasks
-                              .filter((task) => planView === 'ai' || !isDeferred(task.id))
+                              .filter((task) =>
+                                planView === 'ai'
+                                  ? true
+                                  : !isDeferred(task.id)
+                              )
                               .map((task) => {
                               const isChanged = changedTaskIds.has(task.id);
                               const aiTask = aiTaskMap.get(task.id);
                               const displayDevId =
                                 planView === 'ai'
                                   ? (aiTask !== undefined ? aiTask.assignedDevId : task.assignedDevId)
-                                  : task.assignedDevId;
+                                  : (overrides[task.id] ?? task.assignedDevId);
                               const displayPoints =
-                                planView === 'ai' ? (aiTask?.storyPoints ?? task.storyPoints) : (storyPointOverrides[task.id] ?? task.storyPoints);
+                                planView === 'ai'
+                                  ? (aiTask?.storyPoints ?? task.storyPoints)
+                                  : (storyPointOverrides[task.id] ?? task.storyPoints);
+                              const displayDeferred =
+                                planView === 'ai'
+                                  ? (aiTask?.deferred ?? false)
+                                  : isDeferred(task.id);
                               const devName = devNameMap.get(displayDevId ?? '') ?? null;
                               return (
                                 <div key={task.id} className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
@@ -349,6 +380,11 @@ export function ReviewPage() {
                                   <span className={devName ? 'text-slate-300' : 'text-red-400'}>
                                     [{devName ?? 'Unassigned'} · {task.roleTag} · {displayPoints}pts]
                                   </span>
+                                  {displayDeferred && (
+                                    <span className="rounded bg-slate-700/60 px-1 py-0.5 text-[10px] font-medium text-slate-400">
+                                      deferred
+                                    </span>
+                                  )}
                                   {isChanged && (
                                     <span className="rounded bg-amber-900/30 px-1 py-0.5 text-[10px] font-medium text-amber-300">
                                       edited
