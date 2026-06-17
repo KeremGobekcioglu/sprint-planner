@@ -30,7 +30,7 @@ function formatDate(iso: string | null | undefined): string {
 function ActiveSprintCard({ sprint }: { sprint: ActiveSprintSummary }) {
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4 h-full">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-slate-100">{sprint.teamName}</p>
@@ -44,6 +44,8 @@ function ActiveSprintCard({ sprint }: { sprint: ActiveSprintSummary }) {
       </div>
 
       <p className="line-clamp-2 text-sm text-slate-200">{sprint.sprintGoal}</p>
+
+      <div className="flex-1"></div>
 
       <div className="flex gap-4 text-xs text-slate-400">
         <span>{sprint.storyCount} stories</span>
@@ -73,7 +75,7 @@ function TeamCard({ team }: { team: TeamSummary }) {
   const navigate = useNavigate();
   return (
     <button
-      className="flex min-h-[100px] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-left hover:border-slate-300/30 hover:bg-slate-900/80 transition"
+      className="flex min-h-[100px] flex-col gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-left hover:border-slate-300/30 hover:bg-slate-900/80 transition h-full"
       onClick={() => navigate(`/teams/${team.teamId}/plan`)}
     >
       <p className="font-semibold text-slate-100">{team.name}</p>
@@ -153,12 +155,20 @@ export function DashboardPage() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['dashboard'],
     queryFn: getDashboardData,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 30,
   });
 
   useEffect(() => {
-    const onboardingKey = `onboarding_complete_${userId}`;
-    if (data && data.teams.length === 0 && !localStorage.getItem(onboardingKey)) {
+    if (!userId || !data) {
+      return;
+    }
+
+    const onboardingPendingKey = `onboarding_pending_${userId}`;
+    const onboardingCompleteKey = `onboarding_complete_${userId}`;
+    const hasPendingOnboarding = localStorage.getItem(onboardingPendingKey) === 'true';
+    const hasCompletedOnboarding = localStorage.getItem(onboardingCompleteKey) === 'true';
+
+    if (data.teams.length === 0 && hasPendingOnboarding && !hasCompletedOnboarding) {
       navigate('/onboarding', { replace: true });
     }
   }, [data, navigate, userId]);

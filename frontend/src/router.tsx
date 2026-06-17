@@ -12,11 +12,11 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
 import { FaqPage } from './features/faq/FaqPage';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
-
+import { LandingPage } from './features/landing/LandingPage';
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Navigate to="/dashboard" replace />,
+    element: <LandingPage />,
   },
   {
     path: '/login',

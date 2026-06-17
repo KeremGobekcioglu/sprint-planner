@@ -29,6 +29,7 @@ export interface PlanningRequest {
   daysOff: Record<string, number>;
   previousSprintContext?: string;
   carryoverTasks?: CarryoverTask[];
+  codebaseContext?: string;
 }
 
 export interface SprintConfidenceForecast {

@@ -16,5 +16,6 @@ public record TaskDto(
     int storyPoints,
     String status,
     String trelloCardId,
-    String assignmentReason
+    String assignmentReason,
+    boolean deferred
 ) {}

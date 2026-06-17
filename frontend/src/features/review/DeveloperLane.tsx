@@ -16,12 +16,13 @@ interface DeveloperLaneProps {
   sprintId: string;
   openGuidanceTaskId: string | null;
   onGuidanceToggle: (taskId: string | null) => void;
+  readOnly?: boolean;
 }
 
-export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, isDeferred, stories, sprintId, openGuidanceTaskId, onGuidanceToggle }: DeveloperLaneProps) {
+export function DeveloperLane({ developerId, developerLabel, tasks, capacity, onDropTask, onEdit, onDefer, isDeferred, stories, sprintId, openGuidanceTaskId, onGuidanceToggle, readOnly = false }: DeveloperLaneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
-  const points = tasks.reduce((sum, task) => sum + task.storyPoints, 0);
+  const points = tasks.filter((task) => !isDeferred(task.id)).reduce((sum, task) => sum + task.storyPoints, 0);
   const indicator = points > capacity ? 'text-red-500' : points > capacity * 0.8 ? 'text-amber-500' : 'text-green-500';
   const isUnassigned = developerId === 'unassigned';
   const fillPercent = Math.min(100, capacity > 0 ? (points / capacity) * 100 : 0);
@@ -54,6 +55,7 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
               sprintId={sprintId}
               isGuidanceOpen={openGuidanceTaskId === task.id}
               onGuidanceToggle={onGuidanceToggle}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -69,6 +71,7 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
           : 'border-white/10 bg-slate-950/60'
       }`}
       onDragOver={(event) => {
+        if (readOnly) return;
         event.preventDefault();
         setIsDragOver(true);
       }}
@@ -76,6 +79,7 @@ export function DeveloperLane({ developerId, developerLabel, tasks, capacity, on
       onDrop={(event) => {
         event.preventDefault();
         setIsDragOver(false);
+        if (readOnly) return;
         const taskId = event.dataTransfer.getData('text/task-id');
         if (taskId) {
           onDropTask(taskId, developerId);

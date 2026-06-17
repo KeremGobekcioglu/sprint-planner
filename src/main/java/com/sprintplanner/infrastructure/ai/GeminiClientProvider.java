@@ -2,6 +2,7 @@ package com.sprintplanner.infrastructure.ai;
 
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
+import com.google.genai.types.Schema;
 import com.sprintplanner.infrastructure.config.GeminiConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,15 +16,19 @@ public class GeminiClientProvider {
     private static final Logger log = LoggerFactory.getLogger(GeminiClientProvider.class);
 
     // 1. Keep your model identifiers
-    public static final String MODEL_BREAKDOWN       = "gemini-3-flash-preview";
+    public static final String MODEL_BREAKDOWN       = "gemini-3.5-flash";
     public static final String MODEL_BREAKDOWN_RETRY = "gemini-2.5-flash-lite";
     public static final String MODEL_ESTIMATION      = "gemini-2.5-flash-lite";
     public static final String MODEL_DISTRIBUTION    = "gemini-2.5-flash";
+    // Separate constant so the retrospective model can be tuned independently of estimation
+    public static final String MODEL_RETROSPECTIVE   = "gemini-2.5-flash-lite";
 
+    // MODEL_RETROSPECTIVE shares the same string as MODEL_ESTIMATION so it resolves
+    // to the same fallback chain automatically — no separate entry needed.
     private static final Map<String, List<String>> FALLBACK_CHAINS = Map.of(
-            MODEL_BREAKDOWN,    List.of("gemini-3-flash-preview", "gemini-2.5-flash"),
-            MODEL_ESTIMATION,   List.of("gemini-2.5-flash-lite",  "gemini-2.5-flash"),
-            MODEL_DISTRIBUTION, List.of("gemini-2.5-flash",       "gemini-2.5-flash-lite")
+            MODEL_BREAKDOWN,    List.of("gemini-3.5-flash",     "gemini-2.5-flash"),
+            MODEL_ESTIMATION,   List.of("gemini-2.5-flash-lite", "gemini-2.5-flash"),
+            MODEL_DISTRIBUTION, List.of("gemini-2.5-flash",      "gemini-2.5-flash-lite")
     );
 
     private final Client client;
@@ -32,7 +37,17 @@ public class GeminiClientProvider {
         this.client = Client.builder().apiKey(geminiConfig.getApiKey()).build();
     }
 
+    /** Unstructured call — free-text response (task guidance, retrospective narrative). */
     public String generate(String prompt, float temperature, String preferredModel) {
+        return generateInternal(prompt, temperature, preferredModel, null);
+    }
+
+    /** Structured call — constrains the model to return valid JSON matching responseSchema. */
+    public String generate(String prompt, float temperature, String preferredModel, Schema responseSchema) {
+        return generateInternal(prompt, temperature, preferredModel, responseSchema);
+    }
+
+    private String generateInternal(String prompt, float temperature, String preferredModel, Schema responseSchema) {
         List<String> chain = FALLBACK_CHAINS.getOrDefault(preferredModel, List.of(preferredModel));
         Exception lastException = null;
 
@@ -40,9 +55,13 @@ public class GeminiClientProvider {
             long start = System.currentTimeMillis();
             log.info("Gemini [{}] calling — prompt={}ch, temperature={}", model, prompt.length(), temperature);
             try {
-                GenerateContentConfig config = GenerateContentConfig.builder()
-                        .temperature(temperature)
-                        .build();
+                GenerateContentConfig.Builder configBuilder = GenerateContentConfig.builder()
+                        .temperature(temperature);
+                if (responseSchema != null) {
+                    configBuilder.responseMimeType("application/json")
+                                 .responseSchema(responseSchema);
+                }
+                GenerateContentConfig config = configBuilder.build();
                 String result = client.models.generateContent(model, prompt, config).text();
                 long elapsed = System.currentTimeMillis() - start;
                 log.info("Gemini [{}] OK — {}ms | response={}ch", model, elapsed, result == null ? 0 : result.length());

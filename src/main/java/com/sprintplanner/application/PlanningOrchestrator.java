@@ -3,6 +3,10 @@ package com.sprintplanner.application;
 import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.PlanningRequest;
 import com.sprintplanner.domain.dto.SprintPlan;
+import com.sprintplanner.domain.dto.SprintPlanMapper;
+import com.sprintplanner.domain.dto.TaskDto;
+import com.sprintplanner.domain.dto.UserStoryDto;
+import com.sprintplanner.infrastructure.ai.GeminiDistributionAdapter;
 import com.sprintplanner.domain.model.Developer;
 import com.sprintplanner.domain.model.Task;
 import com.sprintplanner.domain.model.Team;
@@ -19,9 +23,12 @@ import com.sprintplanner.domain.port.out.ProgressPort;
 import com.sprintplanner.domain.port.out.SprintRepository;
 import com.sprintplanner.domain.port.out.TeamRepository;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -105,10 +112,68 @@ public class PlanningOrchestrator implements PlanningInputPort {
                 : Math.max(0.5, 1.0 - ((double) totalDaysOff / (devCount * sprintDays)));
             int totalCapacity = (int) (rawCapacity * 0.80 * daysOffFactor);
 
+            Map<UUID, List<String>> developerCapabilities = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    com.sprintplanner.domain.model.Developer::getId,
+                    developer -> developer.getCapabilities().isEmpty()
+                        ? CapabilityInferenceService.inferFromRole(developer.getRole())
+                        : developer.getCapabilities(),
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
+            Map<UUID, String> developerNames = developers.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                    Developer::getId,
+                    Developer::getName,
+                    (a, b) -> a,
+                    java.util.LinkedHashMap::new
+                ));
+
+            push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
+            Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
+                developers,
+                team.getSprintLengthDays(),
+                request.daysOff() == null ? Map.of() : request.daysOff(),
+                effectiveSprintHistory,
+                request.teamId()
+            );
+            int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
+            push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
+            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), adjustedCapacity, developers.size());
+
+            // Build per-capability capacity budget for the breakdown prompt
+            Map<String, Integer> capacityByCapability = new LinkedHashMap<>();
+            for (Developer dev : developers) {
+                int devCapacity = capacityByDeveloper.getOrDefault(dev.getId(), 0);
+                for (String cap : developerCapabilities.getOrDefault(dev.getId(), List.of())) {
+                    capacityByCapability.merge(cap.toLowerCase(), devCapacity, Integer::sum);
+                }
+            }
+
+            // Find capabilities that have zero coverage (no developer has them)
+            Set<String> allKnownCapabilities = Set.of("backend", "frontend", "qa", "devops", "android", "ios");
+            Set<String> coveredCapabilities = capacityByCapability.keySet();
+            Set<String> uncoveredCapabilities = allKnownCapabilities.stream()
+                .filter(c -> !coveredCapabilities.contains(c))
+                .collect(Collectors.toSet());
+
+            StringBuilder devSummary = new StringBuilder();
+            for (Developer dev : developers) {
+                List<String> caps = dev.getCapabilities();
+                if (caps != null && !caps.isEmpty()) {
+                    devSummary.append("- ").append(dev.getName())
+                        .append(": ").append(String.join(", ", caps))
+                        .append(" (").append(capacityByDeveloper.getOrDefault(dev.getId(), 0)).append("pts)")
+                        .append("\n");
+                }
+            }
+            String developerSummary = devSummary.toString();
+
             int epicCount = request.epics() == null ? 0 : request.epics().size();
             push(userId, "breakdown", "Asking AI to break down " + epicCount + " epic(s) into user stories...");
             log.info("[Planning] teamId={} — breakdown start, {} epics", request.teamId(), epicCount);
-            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity));
+            List<UserStory> brokenDown = new ArrayList<>(breakdownPort.breakdown(request, teamProfileMemory, effectiveSprintHistory, totalCapacity, capacityByCapability, uncoveredCapabilities, request.codebaseContext(), developerSummary));
 
             // Inject carry-over tasks as a synthetic story before estimation
             List<CarryoverTaskDto> carryovers = request.carryoverTasks();
@@ -145,49 +210,75 @@ public class PlanningOrchestrator implements PlanningInputPort {
             push(userId, "estimation", "Estimation done: " + totalPoints + " total story points.");
             log.info("[Planning] teamId={} — estimation done: {} total points", request.teamId(), totalPoints);
 
-            push(userId, "capacity", "Calculating capacity for " + developers.size() + " developer(s)...");
-            Map<UUID, Integer> capacityByDeveloper = capacityPort.calculateCapacity(
-                developers,
-                team.getSprintLengthDays(),
-                request.daysOff() == null ? Map.of() : request.daysOff(),
-                effectiveSprintHistory,
-                request.teamId()
-            );
-            int adjustedCapacity = capacityByDeveloper.values().stream().mapToInt(Integer::intValue).sum();
-            push(userId, "capacity", "Capacity ready: " + adjustedCapacity + " available story points across team.");
-            log.info("[Planning] teamId={} — capacity: {} pts for {} devs", request.teamId(), adjustedCapacity, developers.size());
+            // Separate carry-over story from stories that need AI distribution
+            List<UserStory> storiesForDistribution = new ArrayList<>();
+            List<UserStory> carryoverStories = new ArrayList<>();
+            for (UserStory story : estimated) {
+                if (GeminiDistributionAdapter.CARRYOVER_EPIC_TITLE.equals(story.getEpicTitle())
+                        || GeminiDistributionAdapter.CARRYOVER_EPIC_TITLE.equals(story.getTitle())) {
+                    carryoverStories.add(story);
+                } else {
+                    storiesForDistribution.add(story);
+                }
+            }
 
-            Map<UUID, List<String>> developerCapabilities = developers.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    com.sprintplanner.domain.model.Developer::getId,
-                    developer -> developer.getCapabilities().isEmpty()
-                        ? CapabilityInferenceService.inferFromRole(developer.getRole())
-                        : developer.getCapabilities(),
-                    (a, b) -> a,
-                    java.util.LinkedHashMap::new
-                ));
+            // Reserve capacity consumed by pre-assigned carry-over tasks so new tasks
+            // are distributed against what is actually left for each developer
+            Map<UUID, Integer> capacityForDistribution = new LinkedHashMap<>(capacityByDeveloper);
+            for (UserStory story : carryoverStories) {
+                if (story.getTasks() == null) continue;
+                for (Task task : story.getTasks()) {
+                    UUID devId = task.getAssignedDevId();
+                    if (devId != null) {
+                        capacityForDistribution.merge(devId, -task.getStoryPoints(), Integer::sum);
+                    }
+                }
+            }
 
-            Map<UUID, String> developerNames = developers.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                    Developer::getId,
-                    Developer::getName,
-                    (a, b) -> a,
-                    java.util.LinkedHashMap::new
-                ));
-
-            push(userId, "distribution", "Assigning " + taskCount + " tasks to " + developers.size() + " developer(s)...");
+            int distTaskCount = storiesForDistribution.stream()
+                .mapToInt(s -> s.getTasks() == null ? 0 : s.getTasks().size()).sum();
+            push(userId, "distribution", "Assigning " + distTaskCount + " tasks to " + developers.size() + " developer(s)...");
             log.info("[Planning] teamId={} — distribution start", request.teamId());
             SprintPlan result = distributionPort.distribute(
                 request.teamId(),
                 request.sprintGoal(),
-                estimated,
-                capacityByDeveloper,
+                storiesForDistribution,
+                capacityForDistribution,
                 developerCapabilities,
                 developerNames,
                 teamProfileMemory,
                 effectiveSprintHistory
             );
             log.info("[Planning] teamId={} — distribution done", request.teamId());
+
+            // Merge carry-over stories back with original assignments preserved
+            if (!carryoverStories.isEmpty()) {
+                List<UserStoryDto> allStories = new ArrayList<>(result.userStories());
+                List<TaskDto> allUnassigned = new ArrayList<>(result.unassignedTasks());
+                for (UserStory story : carryoverStories) {
+                    List<TaskDto> assignedTaskDtos = new ArrayList<>();
+                    if (story.getTasks() != null) {
+                        for (Task task : story.getTasks()) {
+                            if (task.getAssignedDevId() != null) {
+                                task.setAssignmentReason("Carry-over — reassigned to original developer");
+                                assignedTaskDtos.add(SprintPlanMapper.toDto(task));
+                            } else {
+                                task.setAssignmentReason("Carry-over — was unassigned in previous sprint, assign manually");
+                                allUnassigned.add(SprintPlanMapper.toDto(task));
+                            }
+                        }
+                    }
+                    int storyPts = assignedTaskDtos.stream().mapToInt(TaskDto::storyPoints).sum();
+                    allStories.add(new UserStoryDto(
+                        story.getId(), story.getSprintId(), story.getEpicTitle(),
+                        story.getTitle(), storyPts, story.getStatus(), assignedTaskDtos
+                    ));
+                }
+                result = new SprintPlan(result.teamId(), result.sprintGoal(), allStories, allUnassigned,
+                    result.sprintStatus(), result.confidence());
+                log.info("[Planning] teamId={} — merged {} carry-over story/ies back into plan",
+                    request.teamId(), carryoverStories.size());
+            }
 
             if (userId != null) progressPort.complete(userId);
             return result;

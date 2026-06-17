@@ -12,6 +12,7 @@ interface TaskCardProps {
   sprintId: string;
   isGuidanceOpen: boolean;
   onGuidanceToggle: (taskId: string | null) => void;
+  readOnly?: boolean;
 }
 
 interface TaskCardFormValues {
@@ -26,7 +27,7 @@ interface GuidanceData {
   riskFlags: string[];
 }
 
-export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidanceOpen, onGuidanceToggle }: TaskCardProps) {
+export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidanceOpen, onGuidanceToggle, readOnly = false }: TaskCardProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isLoadingGuidance, setIsLoadingGuidance] = useState(false);
   const [guidanceData, setGuidanceData] = useState<GuidanceData | null>(null);
@@ -59,6 +60,8 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidan
       .finally(() => setIsLoadingGuidance(false));
   }, [isGuidanceOpen, sprintId, task.id]);
 
+  const isCarryover = task.assignmentReason?.startsWith('Carry-over');
+
   const commit = (field: keyof Task, value: string | number) => {
     const oldValue = task[field];
     if (oldValue === value) return;
@@ -67,25 +70,32 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidan
 
   return (
     <article
-      draggable
+      draggable={!readOnly}
       onDragStart={(event) => {
+        if (readOnly) return;
         setIsDragging(true);
         event.dataTransfer.setData('text/task-id', task.id);
       }}
       onDragEnd={() => setIsDragging(false)}
-      className={`space-y-2 rounded-xl border bg-slate-950/60 p-3 cursor-grab active:cursor-grabbing transition ${
-        isDragging ? 'opacity-40 scale-95' : 'opacity-100'
-      } ${
+      className={`space-y-2 rounded-xl border bg-slate-950/60 p-3 transition ${
+        readOnly ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+      } ${isDragging ? 'opacity-40 scale-95' : 'opacity-100'} ${
         isDeferred
           ? 'border-l-4 border-l-amber-400 border-r-slate-500/40 border-t-slate-500/40 border-b-slate-500/40'
           : 'border-slate-500/40'
       }`}
     >
+      {isCarryover && (
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-950/40 px-2 py-0.5 text-xs font-medium text-amber-300">
+          ↩ Carry-over
+        </span>
+      )}
       <div className="flex items-start justify-between gap-2">
         <input
-          className="flex-1 rounded-md border border-slate-500/40 px-2 py-1 text-sm font-semibold"
+          className="flex-1 rounded-md border border-slate-500/40 px-2 py-1 text-sm font-semibold disabled:cursor-default"
+          disabled={readOnly}
           {...register('title')}
-          onBlur={() => commit('title', getValues('title'))}
+          onBlur={() => { if (!readOnly) commit('title', getValues('title')); }}
         />
         {isDeferred && (
           <span className="mt-1 whitespace-nowrap rounded-md bg-amber-500/20 px-2 py-1 text-xs font-medium text-amber-300">
@@ -93,20 +103,24 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidan
           </span>
         )}
       </div>
-      {task.assignmentReason && (
+      {!isCarryover && task.assignmentReason && (
         <p className="mt-1 text-xs text-slate-500 italic">
           💡 {task.assignmentReason}
         </p>
       )}
-      {!task.assignedDevId && task.assignmentReason && (
+      {!isCarryover && !task.assignedDevId && task.assignmentReason && (
         <p className="mt-1 text-xs text-amber-500/70 italic">
           ⚠️ {task.assignmentReason}
         </p>
       )}
+      {isCarryover && task.assignmentReason && (
+        <p className="mt-1 text-xs text-amber-400/70">{task.assignmentReason}</p>
+      )}
       <textarea
-        className="h-16 w-full rounded-md border border-slate-500/40 px-2 py-1 text-xs"
+        className="h-16 w-full rounded-md border border-slate-500/40 px-2 py-1 text-xs disabled:cursor-default"
+        disabled={readOnly}
         {...register('acceptanceCriterion')}
-        onBlur={() => commit('acceptanceCriterion', getValues('acceptanceCriterion'))}
+        onBlur={() => { if (!readOnly) commit('acceptanceCriterion', getValues('acceptanceCriterion')); }}
       />
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -114,9 +128,10 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidan
           <input
             type="number"
             min={1}
-            className="w-16 rounded-md border border-slate-500/40 px-2 py-1 text-xs"
+            className="w-16 rounded-md border border-slate-500/40 px-2 py-1 text-xs disabled:cursor-default"
+            disabled={readOnly}
             {...register('storyPoints', { valueAsNumber: true, min: 1 })}
-            onBlur={() => commit('storyPoints', getValues('storyPoints'))}
+            onBlur={() => { if (!readOnly) commit('storyPoints', getValues('storyPoints')); }}
           />
         </div>
         <div className="flex items-center gap-1">
@@ -133,12 +148,13 @@ export function TaskCard({ task, onEdit, onDefer, isDeferred, sprintId, isGuidan
             {isLoadingGuidance ? '💡 ...' : '💡'}
           </button>
           <button
-            className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+            disabled={readOnly}
+            className={`rounded-md border px-2 py-1 text-xs transition-colors disabled:cursor-default disabled:opacity-50 ${
               isDeferred
                 ? 'border-amber-400/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
                 : 'border-ink/20 hover:bg-ink/10 text-slate-300'
             }`}
-            onClick={() => onDefer(task.id)}
+            onClick={() => { if (!readOnly) onDefer(task.id); }}
           >
             {isDeferred ? 'Un-defer' : 'Defer'}
           </button>

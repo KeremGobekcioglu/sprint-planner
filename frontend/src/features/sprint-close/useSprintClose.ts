@@ -31,6 +31,10 @@ export function useSprintClose(sprintId: string | undefined) {
 
   const submitMutation = useMutation({
     mutationFn: submitReview,
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['sprint', variables.sprintId] });
+    },
     onError: (error) => {
       console.error('Submit review failed', error);
     },

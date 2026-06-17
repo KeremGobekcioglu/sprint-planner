@@ -1,3 +1,4 @@
+
 package com.sprintplanner.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,15 +36,19 @@ import com.sprintplanner.infrastructure.persistence.TaskJpaRepository;
 import com.sprintplanner.infrastructure.progress.PlanningProgressStore;
 import com.sprintplanner.infrastructure.publisher.TrelloPlanPublisher;
 import com.sprintplanner.web.dto.LogEditHttpRequest;
+import com.sprintplanner.web.dto.PlanComparisonResponse;
 import com.sprintplanner.web.dto.PlanSprintHttpRequest;
 import com.sprintplanner.web.dto.SprintReviewSummary;
 import com.sprintplanner.web.dto.TaskGuidanceResponse;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,6 +64,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/sprints")
@@ -125,7 +131,8 @@ public class SprintPlannerController {
             request.sprintGoal(),
             request.daysOff() == null ? Map.of() : request.daysOff(),
             request.previousSprintContext(),
-            request.carryoverTasks()
+            request.carryoverTasks(),
+            request.codebaseContext()
         );
         
         SprintPlan plan = planningInputPort.planSprint(planningRequest);
@@ -176,6 +183,7 @@ public class SprintPlannerController {
             }
         }
 
+        sprint.setCodebaseContext(request.codebaseContext());
         sprint.setUserStories(userStories);
         sprintRepository.save(sprint);
 
@@ -254,12 +262,20 @@ public class SprintPlannerController {
         String teamProfile = memoryReader.readTeamProfile(teamId);
         String sprintHistory = memoryReader.readSprintHistory(teamId);
 
-        Map<String, Object> body = Map.of(
-            "mode", completedSprints > 0 ? "CONTINUOUS" : "FRESH",
-            "completedSprints", completedSprints,
-            "hasTeamProfile", teamProfile != null && !teamProfile.isBlank(),
-            "hasSprintHistory", sprintHistory != null && !sprintHistory.isBlank()
-        );
+        String lastCodebaseContext = sprintRepository.findByTeamId(teamId).stream()
+            .filter(s -> s.getCodebaseContext() != null && !s.getCodebaseContext().isBlank())
+            .max(Comparator.comparing(Sprint::getPlannedAt))
+            .map(Sprint::getCodebaseContext)
+            .orElse(null);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("mode", completedSprints > 0 ? "CONTINUOUS" : "FRESH");
+        body.put("completedSprints", completedSprints);
+        body.put("hasTeamProfile", teamProfile != null && !teamProfile.isBlank());
+        body.put("hasSprintHistory", sprintHistory != null && !sprintHistory.isBlank());
+        if (lastCodebaseContext != null) {
+            body.put("lastCodebaseContext", lastCodebaseContext);
+        }
 
         return ResponseEntity.ok(body);
     }
@@ -292,8 +308,15 @@ public class SprintPlannerController {
     }
 
     @PostMapping("/{sprintId}/edits")
+    @Transactional
     public ResponseEntity<String> logEdit(@PathVariable String sprintId, @RequestBody LogEditHttpRequest request) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
+
+        UUID taskId = null;
+        if (request.entityId() != null) {
+            try { taskId = UUID.fromString(request.entityId()); } catch (IllegalArgumentException ignored) {}
+        }
+
         EditLog log = new EditLog(
             UUID.randomUUID(),
             normalizedSprintId,
@@ -303,8 +326,106 @@ public class SprintPlannerController {
             request.taskType(),
             Instant.now()
         );
+        log.setTaskId(taskId);
         editLogRepository.save(log);
+
+        // Persist field changes on the task entity so submitReview reads current PM assignments
+        if (taskId != null) {
+            final UUID finalTaskId = taskId;
+            if ("assignedDevId".equals(request.field())) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    UUID newDevId = null;
+                    String newVal = request.newValue();
+                    if (newVal != null && !"unassigned".equals(newVal)) {
+                        try { newDevId = UUID.fromString(newVal); } catch (IllegalArgumentException ignored) {}
+                    }
+                    task.setAssignedDevId(newDevId);
+                    taskJpaRepository.save(task);
+                });
+            } else if ("storyPoints".equals(request.field()) && request.newValue() != null) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    try {
+                        task.setStoryPoints(Integer.parseInt(request.newValue()));
+                        taskJpaRepository.save(task);
+                    } catch (NumberFormatException ignored) {}
+                });
+            } else if ("deferred".equals(request.field()) && request.newValue() != null) {
+                taskJpaRepository.findById(finalTaskId).ifPresent(task -> {
+                    task.setDeferred(Boolean.parseBoolean(request.newValue()));
+                    taskJpaRepository.save(task);
+                });
+            }
+        }
+
         return ResponseEntity.ok("Edit logged.");
+    }
+
+    @GetMapping("/{sprintId}/plan/comparison")
+    public ResponseEntity<PlanComparisonResponse> getSprintPlanComparison(@PathVariable String sprintId) {
+        UUID normalizedSprintId = normalizeSprintId(sprintId);
+        Sprint sprint = sprintRepository.findWithStoriesAndTasksById(normalizedSprintId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+
+        List<EditLog> editLogs = editLogRepository.findBySprintId(normalizedSprintId);
+
+        // Per task, per field: keep only the EARLIEST original value (that's the AI's original plan)
+        Map<UUID, Map<String, String>> taskOriginals = new HashMap<>();
+        editLogs.stream()
+            .filter(e -> e.getTaskId() != null)
+            .filter(e -> "assignedDevId".equals(e.getField()) || "storyPoints".equals(e.getField()))
+            .sorted(Comparator.comparing(EditLog::getLoggedAt))
+            .forEach(e -> taskOriginals
+                .computeIfAbsent(e.getTaskId(), k -> new HashMap<>())
+                .putIfAbsent(e.getField(), e.getOriginalValue()));
+
+        List<TaskDto> aiPlan = new ArrayList<>();
+        List<TaskDto> finalPlan = new ArrayList<>();
+        Set<UUID> changedTaskIds = new HashSet<>();
+        int aiTotalPoints = 0;
+        int finalTotalPoints = 0;
+
+        if (sprint.getUserStories() != null) {
+            for (UserStory story : sprint.getUserStories()) {
+                if (story.getTasks() == null) continue;
+                for (Task task : story.getTasks()) {
+                    TaskDto finalTask = SprintPlanMapper.toDto(task);
+                    finalPlan.add(finalTask);
+                    finalTotalPoints += task.getStoryPoints();
+
+                    Map<String, String> originals = taskOriginals.get(task.getId());
+                    if (originals != null && !originals.isEmpty()) {
+                        changedTaskIds.add(task.getId());
+                        UUID aiDevId = task.getAssignedDevId();
+                        int aiPoints = task.getStoryPoints();
+                        if (originals.containsKey("assignedDevId")) {
+                            String orig = originals.get("assignedDevId");
+                            if (orig == null || "unassigned".equals(orig)) {
+                                aiDevId = null;
+                            } else {
+                                try { aiDevId = UUID.fromString(orig); } catch (IllegalArgumentException ignored) {}
+                            }
+                        }
+                        if (originals.containsKey("storyPoints")) {
+                            try { aiPoints = Integer.parseInt(originals.get("storyPoints")); } catch (NumberFormatException ignored) {}
+                        }
+                        aiTotalPoints += aiPoints;
+                        aiPlan.add(new TaskDto(
+                            task.getId(), task.getStoryId(), aiDevId, task.getTitle(),
+                            task.getDescription(), task.getAcceptanceCriterion(),
+                            task.getRoleTag(), aiPoints, task.getStatus(),
+                            task.getTrelloCardId(), task.getAssignmentReason(), task.isDeferred()
+                        ));
+                    } else {
+                        aiTotalPoints += task.getStoryPoints();
+                        aiPlan.add(finalTask);
+                    }
+                }
+            }
+        }
+
+        return ResponseEntity.ok(new PlanComparisonResponse(
+            aiPlan, finalPlan, changedTaskIds.size(), finalTotalPoints - aiTotalPoints, changedTaskIds
+        ));
     }
 
     @PostMapping("/{sprintId}/trello-push")
@@ -445,7 +566,7 @@ public class SprintPlannerController {
                 .map(Developer::getName).orElse("Unknown");
         }
 
-        String prompt = buildGuidancePrompt(task, devName, teamProfileMemory, sprintHistoryMemory);
+        String prompt = buildGuidancePrompt(task, devName, teamProfileMemory, sprintHistoryMemory, sprint.getCodebaseContext());
         String raw = geminiClientProvider.generate(prompt, 0.3f, GeminiClientProvider.MODEL_ESTIMATION);
 
         try {
@@ -466,7 +587,10 @@ public class SprintPlannerController {
         }
     }
 
-    private String buildGuidancePrompt(Task task, String devName, String teamProfile, String sprintHistory) {
+    private String buildGuidancePrompt(Task task, String devName, String teamProfile, String sprintHistory, String codebaseContext) {
+        String codebaseSection = (codebaseContext != null && !codebaseContext.isBlank())
+            ? "\nCodebase Context:\n" + codebaseContext + "\n"
+            : "";
         return """
             You are a senior software engineer giving implementation advice.
 
@@ -482,8 +606,8 @@ public class SprintPlannerController {
 
             Sprint History:
             %s
-
-            Provide:
+            %s
+            Provide practical guidance tailored to this specific tech stack and codebase state:
             1. 2-3 concrete implementation hints specific to this task
             2. Risk flags: patterns from history suggesting this task type is often underestimated or problematic
             3. A suggested approach in 2-4 numbered steps
@@ -498,8 +622,84 @@ public class SprintPlannerController {
                 task.getTitle(), task.getDescription(), task.getAcceptanceCriterion(),
                 task.getRoleTag(), task.getStoryPoints(), devName,
                 teamProfile != null ? teamProfile : "No preferences yet",
-                sprintHistory != null ? sprintHistory : "No history yet"
+                sprintHistory != null ? sprintHistory : "No history yet",
+                codebaseSection
             );
+    }
+
+    @PostMapping("/parse-context")
+    public ResponseEntity<Map<String, String>> parseContext(
+            @RequestParam("file") MultipartFile file) {
+
+        String filename = file.getOriginalFilename() == null
+                ? "" : file.getOriginalFilename().toLowerCase();
+
+        try {
+            String text;
+            if (filename.endsWith(".pdf")) {
+                text = extractPdf(file.getBytes());
+            } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+                text = extractExcel(file.getInputStream());
+            } else if (filename.endsWith(".txt") || filename.endsWith(".md")) {
+                text = new String(file.getBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            } else {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "Unsupported file type. Use .pdf, .xlsx, .xls, .txt, or .md"));
+            }
+
+            if (text == null || text.isBlank()) {
+                String msg = filename.endsWith(".pdf")
+                        ? "This PDF appears to be scanned — no text layer found. Paste the content manually instead."
+                        : "Could not extract text from file — paste the content manually instead.";
+                return ResponseEntity.badRequest().body(Map.of("error", msg));
+            }
+
+            return ResponseEntity.ok(Map.of("text", text.trim()));
+
+        } catch (Exception e) {
+            logger.warn("[PARSE-CONTEXT] Extraction failed for {}: {}", filename, e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Extraction failed: " + e.getMessage()));
+        }
+    }
+
+    private String extractPdf(byte[] bytes) throws Exception {
+        try (org.apache.pdfbox.pdmodel.PDDocument doc =
+                org.apache.pdfbox.Loader.loadPDF(bytes)) {
+            org.apache.pdfbox.text.PDFTextStripper stripper =
+                    new org.apache.pdfbox.text.PDFTextStripper();
+            return stripper.getText(doc);
+        }
+    }
+
+    private String extractExcel(java.io.InputStream stream) throws Exception {
+        StringBuilder sb = new StringBuilder();
+        try (org.apache.poi.ss.usermodel.Workbook workbook =
+                org.apache.poi.ss.usermodel.WorkbookFactory.create(stream)) {
+            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+                org.apache.poi.ss.usermodel.Sheet sheet = workbook.getSheetAt(i);
+                sb.append("Sheet: ").append(sheet.getSheetName()).append("\n");
+                for (org.apache.poi.ss.usermodel.Row row : sheet) {
+                    StringBuilder rowText = new StringBuilder();
+                    for (org.apache.poi.ss.usermodel.Cell cell : row) {
+                        String val = switch (cell.getCellType()) {
+                            case STRING -> cell.getStringCellValue();
+                            case NUMERIC -> String.valueOf((long) cell.getNumericCellValue());
+                            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+                            default -> "";
+                        };
+                        if (!val.isBlank()) {
+                            rowText.append(val).append("\t");
+                        }
+                    }
+                    if (!rowText.isEmpty()) {
+                        sb.append(rowText.toString().trim()).append("\n");
+                    }
+                }
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
     }
 
     private UUID normalizeSprintId(String rawSprintId) {

@@ -410,8 +410,17 @@ export function OnboardingPage() {
 
   const isTrelloConnected = trelloStatusQuery.data?.connected ?? false;
 
-  function skipOnboarding() {
+  function setOnboardingCompleted() {
+    if (!userId) {
+      return;
+    }
+
     localStorage.setItem(`onboarding_complete_${userId}`, 'true');
+    localStorage.removeItem(`onboarding_pending_${userId}`);
+  }
+
+  function skipOnboarding() {
+    setOnboardingCompleted();
     navigate('/dashboard', { replace: true });
   }
 
@@ -424,7 +433,7 @@ export function OnboardingPage() {
   }
 
   function finishOnboarding() {
-    localStorage.setItem(`onboarding_complete_${userId}`, 'true');
+    setOnboardingCompleted();
     if (createdTeamId) {
       navigate(`/teams/${createdTeamId}/plan`, { replace: true });
     } else {

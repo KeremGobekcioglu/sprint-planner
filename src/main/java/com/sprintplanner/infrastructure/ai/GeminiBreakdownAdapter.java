@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateContentConfig;
 import com.google.genai.types.GenerateContentResponse;
+import com.google.genai.types.Schema;
+import com.google.genai.types.Type;
 import com.sprintplanner.domain.dto.CarryoverTaskDto;
 import com.sprintplanner.domain.dto.Epic;
 import com.sprintplanner.domain.dto.PlanningRequest;
@@ -19,8 +21,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,7 +46,11 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             PlanningRequest request,
             String teamProfileMemory,
             String sprintHistoryMemory,
-            int totalCapacity
+            int totalCapacity,
+            Map<String, Integer> capacityByCapability,
+            Set<String> uncoveredCapabilities,
+            String codebaseContext,
+            String developerSummary
     ) {
         if (teamProfileMemory != null && !teamProfileMemory.isBlank()) {
             logger.info("[BREAKDOWN] Team profile memory loaded ({} chars): ...{}",
@@ -61,108 +68,44 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
         if (epics.isEmpty()) return List.of();
 
+        Schema schema = buildBreakdownSchema();
+
         // ONE call for all epics
-        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity);
-        String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN);
+        String prompt = buildBatchPrompt(epics, request, teamProfileMemory, sprintHistoryMemory, totalCapacity, capacityByCapability, uncoveredCapabilities, codebaseContext, developerSummary);
+        String raw = gemini.generate(prompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN, schema);
         List<UserStory> stories = parseResponse(raw, epics);
 
-        // Retry once if validation fails
+        // Retry once if validation fails — resend full original prompt with a schema-violation prefix
         if (!isValid(stories)) {
-            String retryPrompt = buildRetryPrompt(raw);
-// in breakdown() retry:
-            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY);
+            String retryPrompt = buildRetryPrompt(prompt, raw);
+            String retryRaw = gemini.generate(retryPrompt, 0.4f, GeminiClientProvider.MODEL_BREAKDOWN_RETRY, schema);
             stories = parseResponse(retryRaw, epics);
         }
 
         return stories;
     }
 
-    // ── Prompt ───────────────────────────────────────────────────────────────
 
-    private String buildPrompt(Epic epic, PlanningRequest request,
-                               String teamProfile, String sprintHistory) {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("You are an expert agile sprint planner. Your job is to break down a product epic into user stories and tasks.\n\n");
-
-        sb.append("## Domain\n").append(request.domain()).append("\n\n");
-        sb.append("## Sprint Goal\n").append(request.sprintGoal()).append("\n\n");
-
-        sb.append("## Epic\n");
-        sb.append("Title: ").append(epic.title()).append("\n");
-        if (epic.description() != null && !epic.description().isBlank()) {
-            sb.append("Description: ").append(epic.description()).append("\n");
-        }
-        sb.append("\n");
-
-        if (teamProfile != null && !teamProfile.isBlank()) {
-            sb.append("## Team Preferences (follow these)\n").append(teamProfile).append("\n\n");
-        }
-
-        if (sprintHistory != null && !sprintHistory.isBlank()) {
-            sb.append("## Sprint History (last 3 sprints)\n").append(sprintHistory).append("\n\n");
-        }
-
-        sb.append("## Domain-Specific Rules\n");
-        switch (request.domain()) {
-            case "FINTECH" -> sb.append(
-                    "- All tasks must have strict, testable acceptance criteria.\n" +
-                            "- Include mandatory review/approval steps.\n" +
-                            "- Include compliance or error-handling tasks where relevant.\n" +
-                            "- Estimates should be conservative — fintech tasks are rarely trivial.\n"
-            );
-            case "E_COMMERCE" -> sb.append(
-                    "- Emphasise A/B test tasks and analytics event tracking.\n" +
-                            "- Mobile-first UI tasks should be explicit.\n" +
-                            "- Include QA tasks for checkout and payment flows.\n"
-            );
-            default -> sb.append(
-                    "- Use balanced, neutral breakdown.\n" +
-                            "- Flag ambiguous requirements with a note in the description.\n"
-            );
-        }
-        sb.append("\n");
-
-        sb.append("## Output Rules\n");
-        sb.append("- Respond ONLY with a valid JSON array. No explanation, no markdown, no backticks.\n");
-        sb.append("- Each element is a user story object.\n");
-        sb.append("- Each user story must have: title (string), tasks (array of 2-4 task objects).\n");
-        sb.append("- Each task must have: title (string), description (string), acceptanceCriterion (string), roleTag (one of: backend, frontend, qa, devops).\n");
-        sb.append("- Produce 1-3 user stories per epic.\n");
-        sb.append("- Do not include story points — those will be added by the estimation agent.\n\n");
-
-        sb.append("## Example Output Shape\n");
-        sb.append("""
-            [
-              {
-                "title": "User can complete IBAN transfer",
-                "tasks": [
-                  {
-                    "title": "Implement IBAN validation endpoint",
-                    "description": "POST /transfers/validate-iban — validate format and checksum.",
-                    "acceptanceCriterion": "Invalid IBANs return 400 with error code. Valid IBANs return 200.",
-                    "roleTag": "backend"
-                  },
-                  {
-                    "title": "Build transfer form UI",
-                    "description": "Form with IBAN input, amount, and confirmation step.",
-                    "acceptanceCriterion": "User can submit a valid transfer. Invalid IBAN shows inline error.",
-                    "roleTag": "frontend"
-                  }
-                ]
-              }
-            ]
-            """);
-
-        return sb.toString();
-    }
     private String buildBatchPrompt(List<Epic> epics, PlanningRequest request,
-                                    String teamProfile, String sprintHistory, int totalCapacity) {
+                                    String teamProfile, String sprintHistory, int totalCapacity,
+                                    Map<String, Integer> capacityByCapability, Set<String> uncoveredCapabilities,
+                                    String codebaseContext, String developerSummary) {
         StringBuilder sb = new StringBuilder();
 
         sb.append("You are an expert agile sprint planner. Break down ALL epics below into user stories and tasks.\n\n");
 
         sb.append("## Domain\n").append(request.domain()).append("\n\n");
+
+        if (developerSummary != null && !developerSummary.isBlank()) {
+            sb.append("## Team Composition\n");
+            sb.append("These are the actual developers on this team and what they can work on:\n");
+            sb.append(developerSummary);
+            sb.append("\n");
+            sb.append("IMPORTANT: Each line above is ONE person. If one developer has multiple capabilities (e.g. ios, android, frontend),\n");
+            sb.append("do not create separate tasks for each capability — create ONE task for that person covering all relevant platforms.\n");
+            sb.append("Match task roleTags to what developers actually cover. Do not generate tasks for capabilities not listed above.\n\n");
+        }
+
         sb.append("## Sprint Goal\n").append(request.sprintGoal()).append("\n\n");
 
         sb.append("## Epics\n");
@@ -200,12 +143,27 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         }
         sb.append("\n");
 
-        sb.append("## Capacity Constraint\n");
-        sb.append("Total team capacity for this sprint: ").append(totalCapacity).append(" story points.\n");
-        sb.append("Generate tasks whose total estimated effort stays within this budget.\n");
-        sb.append("Assume backend tasks ~5pts, frontend ~3pts, qa ~2pts, devops ~3pts.\n");
-        sb.append("Produce fewer stories per epic if needed — quality over quantity.\n");
-        sb.append("Do NOT generate more work than the team can complete.\n\n");
+        sb.append("## Capacity Budget by Role\n");
+        // Fix 6: replaced contradictory capacity block with non-contradictory version
+        sb.append("Generate exactly 1 story per epic covering its core requirement. Every epic must be covered.\n");
+        sb.append("Use the role budgets below as sizing guidance only — over-budget tasks are surfaced to the PM, not dropped.\n");
+        sb.append("Generate only tasks each epic genuinely needs. Do not invent supporting tasks.\n");
+        if (capacityByCapability != null && !capacityByCapability.isEmpty()) {
+            for (Map.Entry<String, Integer> entry : capacityByCapability.entrySet()) {
+                sb.append("- ").append(entry.getKey()).append(": ").append(entry.getValue()).append(" pts available\n");
+            }
+        } else {
+            sb.append("Total team capacity for this sprint: ").append(totalCapacity).append(" story points.\n");
+            sb.append("Assume backend tasks ~5pts, frontend ~3pts, qa ~2pts, devops ~3pts.\n");
+        }
+        if (uncoveredCapabilities != null && !uncoveredCapabilities.isEmpty()) {
+            sb.append("\n## Roles with NO developer coverage\n");
+            sb.append("Do NOT generate tasks with these roleTags — no developer can handle them:\n");
+            for (String cap : uncoveredCapabilities) {
+                sb.append("- ").append(cap).append("\n");
+            }
+        }
+        sb.append("\n");
 
         List<CarryoverTaskDto> carryovers = request.carryoverTasks();
         if (carryovers != null && !carryovers.isEmpty()) {
@@ -215,12 +173,41 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
                 .append("Do not regenerate tasks for topics that appear to be carry-over work.\n\n");
         }
 
+        if (codebaseContext != null && !codebaseContext.isBlank()) {
+            sb.append("## Codebase Context\n");
+            sb.append(codebaseContext).append("\n\n");
+            sb.append("Use this context to:\n");
+            sb.append("- Avoid generating tasks for functionality that already exists\n");
+            sb.append("- Match task complexity to the existing architecture\n");
+            sb.append("- Use correct technology names in task titles and descriptions\n");
+            sb.append("- Adjust task scope based on existing infrastructure\n\n");
+        }
         sb.append("## Output Rules\n");
         sb.append("Respond ONLY with a raw JSON array. No explanation, no markdown, no backticks.\n");
-        sb.append("Each element is a user story object with: epicTitle (string), title (string), tasks (array of 2-4 objects).\n");
-        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag (backend|frontend|qa|devops|android|ios).\n");
-        sb.append("Produce 1-3 user stories per epic.\n\n");
+        sb.append("Each element is a user story object with: epicTitle (string), title (string), tasks (array of objects).\n");
+        sb.append("Each task must have: title, description, acceptanceCriterion, roleTag.\n\n");
 
+        sb.append("ROLE TAGS: Use only roles that appear in the Capacity Budget by Role section above.\n");
+        sb.append("  Do not use a roleTag that has 0pts or no developer coverage.\n");
+        sb.append("  If no QA developer exists, fold testing into the implementation task description and acceptance criteria.\n");
+        sb.append("  If a developer has both backend and frontend capabilities, you may assign them a full-stack task.\n\n");
+
+        sb.append("STORY COUNT: Generate exactly 1 story for EVERY epic in the list above. No epic may be skipped.\n");
+        sb.append("  Generate 2 stories for an epic only if it has clearly distinct user-facing and system-level parts.\n\n");
+
+        sb.append("TASK COUNT: Match the number of tasks to the number of distinct role types needed.\n");
+        sb.append("  If a feature needs backend + frontend: 2 tasks.\n");
+        sb.append("  If a feature needs backend + frontend + devops: 3 tasks.\n");
+        sb.append("  If a feature needs only backend: 1 task.\n");
+        sb.append("  Do not create a task just to fill a slot.\n\n");
+
+        sb.append("PLATFORM TASKS: Base platform task count on the team's actual platform developers.\n");
+        sb.append("  If the team has separate Android and iOS developers: create one task per platform.\n");
+        sb.append("  If one developer covers both Android and iOS: create one combined mobile task.\n");
+        sb.append("  If the team has no mobile developers: do not generate android or ios tasks.\n\n");
+
+        sb.append("COMBINING TASKS: Fold simple supporting work (logging, config, basic analytics) into the\n");
+        sb.append("  main implementation task description rather than creating separate tasks.\n\n");
         sb.append("## Example Output Shape\n");
         sb.append("""
         [
@@ -247,30 +234,17 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
 
         return sb.toString();
     }
-    private String buildRetryPrompt(String previousOutput, String epicTitle) {
-        return """
-            Your previous response for epic "%s" was invalid or incomplete.
-            Previous output: %s
-            
-            Requirements that were not met:
-            - Each user story must have a title and 2-4 tasks.
-            - Each task must have: title, description, acceptanceCriterion, roleTag.
-            - roleTag must be one of: backend, frontend, qa, devops.
-            - Response must be a raw JSON array only — no markdown, no backticks.
-            
-            Please produce a corrected response now.
-            """.formatted(epicTitle, previousOutput);
-    }
+
 
     // ── Parsing ──────────────────────────────────────────────────────────────
 
     private List<UserStory> parseResponse(String raw, List<Epic> epics) {
         List<UserStory> stories = new ArrayList<>();
 
-        // fallback epicTitle if LLM doesn't return one
+        // Fix 5: LinkedHashSet preserves input order for deterministic fallback epic title
         Set<String> epicTitles = epics.stream()
                 .map(Epic::title)
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
 
         try {
             String cleaned = raw.trim()
@@ -284,6 +258,7 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
             for (JsonNode storyNode : root) {
                 String epicTitle = storyNode.path("epicTitle").asText("");
                 if (epicTitle.isBlank() && !epicTitles.isEmpty()) {
+                    // First epic in input order (LinkedHashSet guarantees this)
                     epicTitle = epicTitles.iterator().next();
                 }
 
@@ -324,14 +299,13 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         return stories;
     }
 
-    private String buildRetryPrompt(String previousOutput) {
-        return """
-        Your previous response was invalid or incomplete.
-        Previous output: %s
-        
-        Fix it. Return a raw JSON array only — no markdown, no backticks.
-        Each story needs: epicTitle, title, tasks (2-4 items each with title, description, acceptanceCriterion, roleTag).
-        """.formatted(previousOutput);
+    /** Fix 4: re-sends the full original prompt so the retry has at least as much context as the first call. */
+    private String buildRetryPrompt(String originalPrompt, String previousOutput) {
+        return "Your previous response was invalid JSON or violated the schema. "
+                + "Return only valid JSON matching the required shape.\n\n"
+                + originalPrompt
+                + "\n\nPrevious (invalid) response for reference:\n"
+                + previousOutput;
     }
 
     // ── Validation ───────────────────────────────────────────────────────────
@@ -341,7 +315,8 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
 
         for (UserStory story : stories) {
             if (story.getTitle() == null || story.getTitle().isBlank()) return false;
-            if (story.getTasks() == null || story.getTasks().size() < 2) return false;
+            // Fix 1: a story with exactly 1 task is valid (single-role epics e.g. backend-only)
+            if (story.getTasks() == null || story.getTasks().size() < 1) return false;
 
             for (Task task : story.getTasks()) {
                 if (task.getTitle() == null || task.getTitle().isBlank()) return false;
@@ -351,5 +326,37 @@ public class GeminiBreakdownAdapter implements BreakdownPort {
         }
 
         return true;
+    }
+
+    // ── Structured output schema ──────────────────────────────────────────────
+
+    private Schema buildBreakdownSchema() {
+        Schema taskSchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "title",               Schema.builder().type(Type.Known.STRING).build(),
+                        "description",         Schema.builder().type(Type.Known.STRING).build(),
+                        "acceptanceCriterion", Schema.builder().type(Type.Known.STRING).build(),
+                        "roleTag",             Schema.builder().type(Type.Known.STRING)
+                                                       .enum_(List.of("backend", "frontend", "qa", "devops", "android", "ios"))
+                                                       .build()
+                ))
+                .required(List.of("title", "description", "acceptanceCriterion", "roleTag"))
+                .build();
+
+        Schema storySchema = Schema.builder()
+                .type(Type.Known.OBJECT)
+                .properties(Map.of(
+                        "epicTitle", Schema.builder().type(Type.Known.STRING).build(),
+                        "title",     Schema.builder().type(Type.Known.STRING).build(),
+                        "tasks",     Schema.builder().type(Type.Known.ARRAY).items(taskSchema).build()
+                ))
+                .required(List.of("epicTitle", "title", "tasks"))
+                .build();
+
+        return Schema.builder()
+                .type(Type.Known.ARRAY)
+                .items(storySchema)
+                .build();
     }
 }

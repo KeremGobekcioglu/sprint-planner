@@ -9,9 +9,10 @@ import com.sprintplanner.domain.port.out.TeamRepository;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +20,9 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class PreferenceService {
+
+    /** Patterns not re-detected within this window are dropped from the profile. */
+    private static final long PATTERN_DECAY_DAYS = 60;
 
     private final MemoryWriter memoryWriter;
     private final MemoryReader memoryReader;
@@ -50,25 +54,40 @@ public class PreferenceService {
             .append(System.lineSeparator())
             .append(System.lineSeparator());
 
-        // Load and parse patterns from the previous profile
+        // Load previous patterns with their last-seen timestamps
         String existingProfile = memoryReader.readTeamProfile(teamId);
-        List<String> previousPatterns = parseExistingPatterns(existingProfile);
+        Map<String, Instant> previousPatterns = parseExistingPatterns(existingProfile);
 
         // Detect patterns from current sprint's edit logs
         List<String> newPatterns = editLogs.isEmpty() ? List.of() : detectPatterns(editLogs);
 
-        // Merge: start with previous patterns, add new ones that aren't already present
-        LinkedHashSet<String> mergedPatterns = new LinkedHashSet<>(previousPatterns);
+        Instant now = Instant.now();
+        Instant decayCutoff = now.minus(PATTERN_DECAY_DAYS, ChronoUnit.DAYS);
+
+        // Merge: refresh last-seen for re-detected patterns; drop stale ones; add new ones
+        Map<String, Instant> mergedPatterns = new LinkedHashMap<>();
+        for (Map.Entry<String, Instant> entry : previousPatterns.entrySet()) {
+            if (newPatterns.contains(entry.getKey())) {
+                mergedPatterns.put(entry.getKey(), now);
+            } else if (entry.getValue().isAfter(decayCutoff)) {
+                mergedPatterns.put(entry.getKey(), entry.getValue());
+            }
+            // else: pattern is stale — drop it
+        }
         for (String p : newPatterns) {
-            mergedPatterns.add(p);
+            mergedPatterns.putIfAbsent(p, now);
         }
 
         builder.append("## Patterns Detected").append(System.lineSeparator());
         if (mergedPatterns.isEmpty()) {
             builder.append("- No clear patterns detected from edits.").append(System.lineSeparator());
         } else {
-            for (String pattern : mergedPatterns) {
-                builder.append("- ").append(pattern).append(System.lineSeparator());
+            for (Map.Entry<String, Instant> entry : mergedPatterns.entrySet()) {
+                String lastSeenDate = DateTimeFormatter.ISO_LOCAL_DATE
+                    .format(entry.getValue().atZone(ZoneId.systemDefault()));
+                builder.append("- ").append(entry.getKey())
+                    .append(" (last seen: ").append(lastSeenDate).append(")")
+                    .append(System.lineSeparator());
             }
         }
         builder.append(System.lineSeparator());
@@ -79,11 +98,18 @@ public class PreferenceService {
         return builder.toString();
     }
 
-    private List<String> parseExistingPatterns(String existingProfile) {
-        List<String> patterns = new ArrayList<>();
+    /**
+     * Parses the ## Patterns Detected section from a stored profile.
+     * Returns a map of pattern-text → last-seen instant.
+     * Tolerates old-format lines with no "(last seen: ...)" suffix — treats them as seen now
+     * so an existing profile is not wiped on the first run after deploy.
+     */
+    private Map<String, Instant> parseExistingPatterns(String existingProfile) {
+        Map<String, Instant> patterns = new LinkedHashMap<>();
         if (existingProfile == null || existingProfile.isBlank()) {
             return patterns;
         }
+        Instant now = Instant.now();
         boolean inPatternsSection = false;
         for (String line : existingProfile.lines().toList()) {
             if (line.startsWith("## Patterns Detected")) {
@@ -95,11 +121,28 @@ public class PreferenceService {
                     break;
                 }
                 if (line.startsWith("- ") && line.length() > 2) {
-                    String pattern = line.substring(2).trim();
-                    if (!pattern.isEmpty()
-                            && !pattern.equals("No edits available yet.")
-                            && !pattern.equals("No clear patterns detected from edits.")) {
-                        patterns.add(pattern);
+                    String raw = line.substring(2).trim();
+                    if (raw.isEmpty()
+                            || raw.equals("No edits available yet.")
+                            || raw.equals("No clear patterns detected from edits.")) {
+                        continue;
+                    }
+                    // Parse optional "(last seen: YYYY-MM-DD)" suffix
+                    int suffixStart = raw.lastIndexOf(" (last seen: ");
+                    if (suffixStart >= 0 && raw.endsWith(")")) {
+                        String patternText = raw.substring(0, suffixStart).trim();
+                        String dateStr = raw.substring(suffixStart + " (last seen: ".length(), raw.length() - 1);
+                        Instant lastSeen;
+                        try {
+                            lastSeen = java.time.LocalDate.parse(dateStr)
+                                .atStartOfDay(ZoneId.systemDefault()).toInstant();
+                        } catch (Exception e) {
+                            lastSeen = now; // malformed date — treat as current
+                        }
+                        patterns.put(patternText, lastSeen);
+                    } else {
+                        // Old-format line with no suffix — treat as seen now to avoid wiping on migration
+                        patterns.put(raw, now);
                     }
                 }
             }
@@ -110,8 +153,12 @@ public class PreferenceService {
     private List<String> detectPatterns(List<EditLog> editLogs) {
         List<String> patterns = new ArrayList<>();
 
+        // Count only defer-ON edits (newValue == "true"). Defer-then-undefer would otherwise
+        // inflate the count. Per-task net dedup is not possible because entityId is not
+        // persisted on EditLog — this "true"-filter is the chosen approximation.
         long deferredCount = editLogs.stream()
             .filter(log -> "deferred".equals(log.getField()))
+            .filter(log -> "true".equals(log.getNewValue()))
             .count();
         if (deferredCount >= 3) {
             patterns.add("PM frequently defers tasks — consider reducing scope per epic");

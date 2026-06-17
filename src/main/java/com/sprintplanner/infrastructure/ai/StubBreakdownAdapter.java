@@ -7,6 +7,8 @@ import com.sprintplanner.domain.model.UserStory;
 import com.sprintplanner.domain.port.out.BreakdownPort;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
@@ -16,7 +18,8 @@ import org.springframework.stereotype.Component;
 public class StubBreakdownAdapter implements BreakdownPort {
 
     @Override
-    public List<UserStory> breakdown(PlanningRequest request, String teamProfileMemory, String sprintHistoryMemory, int totalCapacity) {
+    public List<UserStory> breakdown(PlanningRequest request, String teamProfileMemory, String sprintHistoryMemory, int totalCapacity,
+            Map<String, Integer> capacityByCapability, Set<String> uncoveredCapabilities, String codebaseContext, String developerSummary) {
         List<UserStory> stories = new ArrayList<>();
         List<Epic> epics = request.epics() == null ? List.of() : request.epics();
 
