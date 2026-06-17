@@ -342,6 +342,7 @@ export interface RetrospectiveReport {
 }
 
 export interface PlanComparisonTask {
+  deferred?: boolean;
   id: string;
   storyId: string;
   assignedDevId?: string;
