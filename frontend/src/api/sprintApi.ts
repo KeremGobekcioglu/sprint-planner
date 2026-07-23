@@ -341,9 +341,60 @@ export interface RetrospectiveReport {
   aiAnalysis: string;
 }
 
+export interface PlanComparisonTask {
+  deferred?: boolean;
+  id: string;
+  storyId: string;
+  assignedDevId?: string;
+  title: string;
+  description: string;
+  acceptanceCriterion: string;
+  roleTag: string;
+  storyPoints: number;
+  status: string;
+  trelloCardId?: string;
+  assignmentReason?: string;
+}
+
+export interface PlanComparison {
+  aiPlan: PlanComparisonTask[];
+  finalPlan: PlanComparisonTask[];
+  editCount: number;
+  pointsDelta: number;
+  changedTaskIds: string[];
+}
+
+export const getSprintPlanComparison = async (sprintId: string): Promise<PlanComparison | null> => {
+  if (!USE_REAL_API) return null;
+  const canonicalSprintId = normalizeSprintId(sprintId);
+  try {
+    const response = await api.get<PlanComparison>(`/api/sprints/${canonicalSprintId}/plan/comparison`);
+    return response.data;
+  } catch {
+    return null;
+  }
+};
+
 export const getRetrospectiveReport = async (sprintId: string): Promise<RetrospectiveReport> => {
   const response = await api.get(`/api/sprints/${normalizeSprintId(sprintId)}/retrospective`);
   return response.data as RetrospectiveReport;
+};
+
+export const parseContext = async (file: File): Promise<string> => {
+  if (!USE_REAL_API) {
+    throw new Error('File extraction not available in demo mode — paste the content manually.');
+  }
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<{ text?: string; error?: string }>(
+    '/api/sprints/parse-context',
+    formData,
+    { headers: { 'Content-Type': undefined } },
+  );
+  if (response.data.error) {
+    throw new Error(response.data.error);
+  }
+  return response.data.text ?? '';
 };
 
 export async function getSampleEpicsForPlanning(

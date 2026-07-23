@@ -75,6 +75,9 @@ public class Sprint {
     @OrderColumn(name = "story_order")
     private List<UserStory> userStories = new ArrayList<>();
 
+    @Column(name = "codebase_context", columnDefinition = "TEXT")
+    private String codebaseContext;
+
     @OneToOne(mappedBy = "sprint", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private SprintReview sprintReview;
 
@@ -106,6 +109,7 @@ public class Sprint {
     public Status getStatus() { return status; }
     public Instant getPlannedAt() { return plannedAt; }
     public Instant getReviewedAt() { return reviewedAt; }
+    public String getCodebaseContext() { return codebaseContext; }
     public List<UserStory> getUserStories() { return userStories; }
     public SprintReview getSprintReview() { return sprintReview; }
     public List<EditLog> getEditLogs() { return editLogs; }
@@ -121,6 +125,7 @@ public class Sprint {
     public void setStatus(Status status) { this.status = status; }
     public void setPlannedAt(Instant plannedAt) { this.plannedAt = plannedAt; }
     public void setReviewedAt(Instant reviewedAt) { this.reviewedAt = reviewedAt; }
+    public void setCodebaseContext(String codebaseContext) { this.codebaseContext = codebaseContext; }
     public void setUserStories(List<UserStory> userStories) { this.userStories = userStories; }
     public void setSprintReview(SprintReview sprintReview) { this.sprintReview = sprintReview; }
     public void setEditLogs(List<EditLog> editLogs) { this.editLogs = editLogs; }

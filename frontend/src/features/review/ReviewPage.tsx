@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { deleteSprint } from '../../api/sprintApi';
+import { deleteSprint, getSprintPlanComparison, type PlanComparison, type PlanComparisonTask } from '../../api/sprintApi';
 import { getTrelloStatus } from '../../api/profileApi';
 import { ConfirmDialog } from '../../components/shared/ConfirmDialog';
 import { ErrorBanner } from '../../components/shared/ErrorBanner';
@@ -32,7 +32,18 @@ export function ReviewPage() {
   const [trelloNoticeDismissed, setTrelloNoticeDismissed] = useState(
     () => localStorage.getItem('trello_notice_dismissed') === 'true',
   );
+  const [planView, setPlanView] = useState<'ai' | 'final'>('final');
+  const [comparison, setComparison] = useState<PlanComparison | null>(null);
   const effectiveSprintId = planQuery.data?.sprintId;
+
+  const refreshComparison = (sprintId: string) => {
+    getSprintPlanComparison(sprintId).then(setComparison);
+  };
+
+  useEffect(() => {
+    if (!effectiveSprintId) return;
+    refreshComparison(effectiveSprintId);
+  }, [effectiveSprintId]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteSprint(id),
@@ -95,10 +106,57 @@ export function ReviewPage() {
     [developersQuery.data],
   );
 
+  const aiTaskMap = useMemo(() => {
+    const map = new Map<string, PlanComparisonTask>();
+    comparison?.aiPlan.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [comparison]);
+
+  const allTasksById = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const task of allTasks) map.set(task.id, task);
+    return map;
+  }, [allTasks]);
+
+  const changedTaskIds = useMemo(() => {
+    if (!comparison) return new Set<string>();
+    const changed = new Set<string>();
+    for (const aiTask of comparison.aiPlan) {
+      const current = allTasksById.get(aiTask.id);
+      if (!current) continue;
+      const currentDevId = overrides[aiTask.id] ?? current.assignedDevId;
+      const currentPoints = storyPointOverrides[aiTask.id] ?? current.storyPoints;
+      const currentDeferred = isDeferred(aiTask.id);
+      if (
+        currentDevId !== aiTask.assignedDevId ||
+        currentPoints !== aiTask.storyPoints ||
+        currentDeferred !== (aiTask.deferred ?? false)
+      ) {
+        changed.add(aiTask.id);
+      }
+    }
+    return changed;
+  }, [comparison, overrides, storyPointOverrides, allTasksById, isDeferred]);
+
+  const carryoverCount = useMemo(() => {
+    const plan = planQuery.data;
+    const assignedCount = plan?.userStories?.flatMap((s) => s.tasks ?? [])
+      .filter((t) => t.assignmentReason?.startsWith('Carry-over'))
+      .length ?? 0;
+    const unassignedCount = plan?.unassignedTasks
+      ?.filter((t) => t.assignmentReason?.startsWith('Carry-over'))
+      .length ?? 0;
+    return assignedCount + unassignedCount;
+  }, [planQuery.data]);
+
   const hasReviewedAllWarnings = warnings.every((warning) => dismissedWarnings.includes(warning.type));
 
   const teamId = planQuery.data?.teamId;
   const hasTrelloBoard = Boolean(teamQuery.data?.trelloBoardId);
+  const isPushedToTrello =
+    pushTrelloMutation.isSuccess ||
+    planQuery.data?.sprintStatus === 'ACTIVE' ||
+    planQuery.data?.sprintStatus === 'COMPLETED';
 
   const trelloStatusQuery = useQuery({
     queryKey: ['trello-status'],
@@ -131,7 +189,7 @@ export function ReviewPage() {
               />
             </div>
           )}
-          {pushTrelloMutation.isSuccess ? (
+          {isPushedToTrello ? (
             <span className="rounded-lg bg-emerald-600/20 px-4 py-2 text-sm font-semibold text-emerald-300">
               Pushed to Trello ✓
             </span>
@@ -243,14 +301,42 @@ export function ReviewPage() {
 
         {planQuery.data && epicGroups.length > 0 && (
           <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-left"
-              onClick={() => setSprintPlanCollapsed((c) => !c)}
-            >
-              <span className="text-sm font-semibold text-slate-200">Sprint Plan</span>
-              <span className="text-xs text-slate-400">{sprintPlanCollapsed ? '▶ Show' : '▼ Hide'}</span>
-            </button>
+            <div className="flex w-full items-center justify-between">
+              <button
+                type="button"
+                className="flex flex-1 items-center gap-2 text-left"
+                onClick={() => setSprintPlanCollapsed((c) => !c)}
+              >
+                <span className="text-sm font-semibold text-slate-200">Sprint Plan</span>
+                <span className="text-xs text-slate-400">{sprintPlanCollapsed ? '▶ Show' : '▼ Hide'}</span>
+              </button>
+              {comparison && comparison.editCount > 0 && (
+                <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/60 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPlanView('ai')}
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                      planView === 'ai'
+                        ? 'bg-blue-500/20 text-blue-300'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    AI Plan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPlanView('final')}
+                    className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                      planView === 'final'
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Final Plan
+                  </button>
+                </div>
+              )}
+            </div>
             {!sprintPlanCollapsed && (
               <div className="mt-4 space-y-4">
                 {epicGroups.map(([epicTitle, epicStories]) => (
@@ -266,14 +352,44 @@ export function ReviewPage() {
                             </span>
                           </p>
                           <div className="space-y-0.5 pl-3">
-                            {story.tasks.map((task) => {
-                              const devName = devNameMap.get(task.assignedDevId ?? '') ?? null;
+                            {story.tasks
+                              .filter((task) =>
+                                planView === 'ai'
+                                  ? true
+                                  : !isDeferred(task.id)
+                              )
+                              .map((task) => {
+                              const isChanged = changedTaskIds.has(task.id);
+                              const aiTask = aiTaskMap.get(task.id);
+                              const displayDevId =
+                                planView === 'ai'
+                                  ? (aiTask !== undefined ? aiTask.assignedDevId : task.assignedDevId)
+                                  : (overrides[task.id] ?? task.assignedDevId);
+                              const displayPoints =
+                                planView === 'ai'
+                                  ? (aiTask?.storyPoints ?? task.storyPoints)
+                                  : (storyPointOverrides[task.id] ?? task.storyPoints);
+                              const displayDeferred =
+                                planView === 'ai'
+                                  ? (aiTask?.deferred ?? false)
+                                  : isDeferred(task.id);
+                              const devName = devNameMap.get(displayDevId ?? '') ?? null;
                               return (
                                 <div key={task.id} className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
                                   <span>- {task.title}</span>
                                   <span className={devName ? 'text-slate-300' : 'text-red-400'}>
-                                    [{devName ?? 'Unassigned'} · {task.roleTag} · {task.storyPoints}pts]
+                                    [{devName ?? 'Unassigned'} · {task.roleTag} · {displayPoints}pts]
                                   </span>
+                                  {displayDeferred && (
+                                    <span className="rounded bg-slate-700/60 px-1 py-0.5 text-[10px] font-medium text-slate-400">
+                                      deferred
+                                    </span>
+                                  )}
+                                  {isChanged && (
+                                    <span className="rounded bg-amber-900/30 px-1 py-0.5 text-[10px] font-medium text-amber-300">
+                                      edited
+                                    </span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -319,6 +435,28 @@ export function ReviewPage() {
           </div>
         )}
 
+        {isPushedToTrello && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3">
+            <p className="text-sm font-medium text-amber-300">
+              🔒 This sprint has been pushed to Trello. The plan is locked — changes must be made directly on the Trello board.
+            </p>
+          </div>
+        )}
+
+        {carryoverCount > 0 && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 flex items-start gap-3">
+            <span className="text-lg">↩</span>
+            <div>
+              <p className="text-sm font-medium text-amber-300">
+                {carryoverCount} carry-over task{carryoverCount === 1 ? '' : 's'} from the previous sprint have been pre-assigned to their original developers.
+              </p>
+              <p className="mt-0.5 text-xs text-amber-400/70">
+                Review each carry-over task before approving — reassign or defer as needed.
+              </p>
+            </div>
+          </div>
+        )}
+
         {planQuery.data && allTasks.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-slate-950/40 px-6 py-12 text-center">
             <p className="text-slate-300">
@@ -334,8 +472,10 @@ export function ReviewPage() {
           </div>
         )}
 
-        <p className="hidden text-xs text-slate-500 sm:block">Drag tasks between lanes to reassign developers.</p>
-        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3">
+        {!isPushedToTrello && (
+          <p className="hidden text-xs text-slate-500 sm:block">Drag tasks between lanes to reassign developers.</p>
+        )}
+        <div className="grid gap-4 pb-32 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {lanes.map(([developerId, tasks]) => (
             <DeveloperLane
               key={developerId}
@@ -351,6 +491,7 @@ export function ReviewPage() {
               sprintId={effectiveSprintId ?? ''}
               openGuidanceTaskId={openGuidanceTaskId}
               onGuidanceToggle={setOpenGuidanceTaskId}
+              readOnly={isPushedToTrello}
               onDropTask={(taskId, targetDeveloperId) => {
                 const sourceTask = allTasks.find((task) => task.id === taskId);
                 if (!sourceTask || !effectiveSprintId) return;
@@ -367,7 +508,9 @@ export function ReviewPage() {
                   taskType: 'assignment',
                 };
                 addEdit(edit);
-                logEditMutation.mutate({ id: effectiveSprintId, edit });
+                logEditMutation.mutate({ id: effectiveSprintId, edit }, {
+                  onSuccess: () => refreshComparison(effectiveSprintId),
+                });
               }}
               onEdit={(taskId, field, oldValue, newValue) => {
                 if (!effectiveSprintId) return;
@@ -382,7 +525,9 @@ export function ReviewPage() {
                   taskType: field === 'storyPoints' ? 'estimation' : 'UNKNOWN',
                 };
                 addEdit(edit);
-                logEditMutation.mutate({ id: effectiveSprintId, edit });
+                logEditMutation.mutate({ id: effectiveSprintId, edit }, {
+                  onSuccess: () => refreshComparison(effectiveSprintId),
+                });
               }}
               onDefer={(taskId) => {
                 const currentDeferred = isDeferred(taskId);

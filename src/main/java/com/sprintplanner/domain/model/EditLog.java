@@ -29,6 +29,10 @@ public class EditLog {
     @JoinColumn(name = "sprint_id", insertable = false, updatable = false)
     private Sprint sprint;
 
+    /** FK to the task that was edited — nullable for legacy rows. */
+    @Column(name = "task_id")
+    private UUID taskId;
+
     /** The field name that was edited (e.g. "assignedDevId", "storyPoints"). */
     @Column(nullable = false)
     private String field;
@@ -64,6 +68,7 @@ public class EditLog {
     public UUID getId() { return id; }
     public UUID getSprintId() { return sprintId; }
     public Sprint getSprint() { return sprint; }
+    public UUID getTaskId() { return taskId; }
     public String getField() { return field; }
     public String getOriginalValue() { return originalValue; }
     public String getNewValue() { return newValue; }
@@ -75,6 +80,7 @@ public class EditLog {
     public void setId(UUID id) { this.id = id; }
     public void setSprintId(UUID sprintId) { this.sprintId = sprintId; }
     public void setSprint(Sprint sprint) { this.sprint = sprint; }
+    public void setTaskId(UUID taskId) { this.taskId = taskId; }
     public void setField(String field) { this.field = field; }
     public void setOriginalValue(String originalValue) { this.originalValue = originalValue; }
     public void setNewValue(String newValue) { this.newValue = newValue; }

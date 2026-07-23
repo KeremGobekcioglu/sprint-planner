@@ -140,8 +140,12 @@ The planning pipeline is orchestrated by `PlanningOrchestrator` in the applicati
 
 Notes:
 - All three Gemini adapters are implemented and wired; stubs remain available for offline development and tests and are registered as fallbacks.
+- All three adapters now use SDK structured output: `GeminiClientProvider.generate(prompt, temperature, model, Schema)` sets `responseMimeType("application/json")` and `responseSchema(schema)` on the config. The existing 3-arg overload is unchanged (used for guidance/retrospective). Fence-stripping is kept as a defensive fallback in all three adapters.
 - Distribution uses capability-based routing: developer `capabilities` are matched to task `role_tag` (capabilities stored as CSV string in `Developer.capabilities`, parsed via `Developer.getCapabilities()` transient getter).
 - Capacity enforcement happens after estimation: the distribution adapter must respect capacities computed by `CapacityCalculator`.
+- `GeminiBreakdownAdapter.isValid()` requires ≥1 task per story (not ≥2); single-role epics (e.g. backend-only) are valid. Retry re-sends the full original prompt. Epic-title fallback is deterministic via `LinkedHashSet`. Capacity prompt block no longer contradicts itself.
+- `GeminiEstimationAdapter` retries once before falling back to heuristics; logs WARN by task ID when the model omits a task; variety-check bias removed.
+- Do not change `GeminiClientProvider.generate(String, float, String)` signature — it is called by `SprintPlannerController` (task guidance) and `RetrospectiveService` which need free-text responses.
 
 ---
 
