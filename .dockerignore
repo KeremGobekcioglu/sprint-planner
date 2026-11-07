@@ -1,0 +1,14 @@
+.git
+.idea
+.vscode
+.claude
+target
+memory
+additional
+*.md
+.env
+.env.*
+!.env.prod.example
+frontend/node_modules
+frontend/dist
+frontend/.env

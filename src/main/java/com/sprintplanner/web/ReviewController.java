@@ -24,7 +24,10 @@ public class ReviewController {
     private final SprintReviewService sprintReviewService;
     private final EditLogRepository editLogRepository;
 
-    public ReviewController(SprintReviewService sprintReviewService, EditLogRepository editLogRepository) {
+    private final AccessGuard accessGuard;
+
+    public ReviewController(SprintReviewService sprintReviewService, EditLogRepository editLogRepository, AccessGuard accessGuard) {
+        this.accessGuard = accessGuard;
         this.sprintReviewService = sprintReviewService;
         this.editLogRepository = editLogRepository;
     }
@@ -33,6 +36,7 @@ public class ReviewController {
     @PostMapping
     public ResponseEntity<Void> submitReview(@RequestBody com.sprintplanner.web.dto.SprintReviewRequest request) {
         // Delegate to application service which performs the close/submit workflow
+        accessGuard.requireSprint(request == null ? null : request.sprintId());
         sprintReviewService.submitReview(request);
         return ResponseEntity.ok().build();
     }

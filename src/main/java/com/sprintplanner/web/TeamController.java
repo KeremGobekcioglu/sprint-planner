@@ -55,11 +55,13 @@ public class TeamController {
     private final MemoryWriter memoryWriter;
     private final TrelloApiClient trelloApiClient;
     private final JpaUserRepository userRepository;
+    private final AccessGuard accessGuard;
 
     public TeamController(TeamService teamService, TeamRepository teamRepository,
             DeveloperRepository developerRepository, SprintRepository sprintRepository,
             MemoryReader memoryReader, MemoryWriter memoryWriter,
-            TrelloApiClient trelloApiClient, JpaUserRepository userRepository) {
+            TrelloApiClient trelloApiClient, JpaUserRepository userRepository, AccessGuard accessGuard) {
+        this.accessGuard = accessGuard;
         this.teamService = teamService;
         this.teamRepository = teamRepository;
         this.developerRepository = developerRepository;
@@ -303,6 +305,7 @@ public class TeamController {
 
     @GetMapping("/{teamId}/carryover")
     public ResponseEntity<List<CarryoverTaskDto>> getCarryoverTasks(@PathVariable UUID teamId) {
+        accessGuard.requireTeam(teamId);
         List<Sprint> sprints = sprintRepository.findByTeamId(teamId);
         java.util.Optional<Sprint> latestCompleted = sprints.stream()
             .filter(s -> s.getStatus() == Sprint.Status.COMPLETED)
@@ -385,7 +388,7 @@ public class TeamController {
             String trelloBoardId = (String) values[2];
 
             var existingTeam = teamRepository.findAll().stream()
-                .filter(team -> teamName.equals(team.getName()))
+                .filter(team -> teamName.equals(team.getName()) && currentUserId.equals(team.getOwnerId()))
                 .findFirst()
                 .orElse(null);
 

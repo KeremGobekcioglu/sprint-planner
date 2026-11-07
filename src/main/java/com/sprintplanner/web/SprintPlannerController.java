@@ -56,6 +56,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import com.sprintplanner.infrastructure.ratelimit.AiUsageLimiter;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -91,6 +92,8 @@ public class SprintPlannerController {
     private final ConfidenceCalculator confidenceCalculator;
     private final RetrospectiveService retrospectiveService;
     private final SprintReviewService sprintReviewService;
+    private final AccessGuard accessGuard;
+    private final AiUsageLimiter aiUsageLimiter;
 
     public SprintPlannerController(PlanningInputPort planningInputPort, SprintRepository sprintRepository,
             MemoryReader memoryReader, EditLogRepository editLogRepository, TeamRepository teamRepository,
@@ -99,7 +102,8 @@ public class SprintPlannerController {
             JpaUserRepository userRepository, TaskJpaRepository taskJpaRepository,
             GeminiClientProvider geminiClientProvider, ObjectMapper objectMapper,
             ConfidenceCalculator confidenceCalculator, RetrospectiveService retrospectiveService,
-            SprintReviewService sprintReviewService) {
+            SprintReviewService sprintReviewService,
+            AccessGuard accessGuard, AiUsageLimiter aiUsageLimiter) {
         this.planningInputPort = planningInputPort;
         this.sprintRepository = sprintRepository;
         this.memoryReader = memoryReader;
@@ -116,11 +120,16 @@ public class SprintPlannerController {
         this.confidenceCalculator = confidenceCalculator;
         this.retrospectiveService = retrospectiveService;
         this.sprintReviewService = sprintReviewService;
+        this.accessGuard = accessGuard;
+        this.aiUsageLimiter = aiUsageLimiter;
     }
 
     @PostMapping("/plan")
     public ResponseEntity<SprintPlan> planSprint(@RequestBody PlanSprintHttpRequest request) {
         UUID currentUserId = SecurityUtils.getCurrentUserId();
+        accessGuard.requireTeam(request.teamId());
+        validatePlanInput(request);
+        aiUsageLimiter.consume(currentUserId, SecurityUtils.isAdmin(), AiUsageLimiter.WEIGHT_PLAN);
         PlanningRequest planningRequest = new PlanningRequest(
             request.teamId(),
             currentUserId,
@@ -252,13 +261,15 @@ public class SprintPlannerController {
     public ResponseEntity<SprintConfidenceForecast> getConfidenceForecast(
             @PathVariable UUID teamId,
             @RequestParam int points) {
+        accessGuard.requireTeam(teamId);
         SprintConfidenceForecast forecast = confidenceCalculator.calculate(teamId, points);
         return ResponseEntity.ok(forecast);
     }
 
     @GetMapping("/teams/{teamId}/planning-mode")
     public ResponseEntity<Map<String, Object>> getPlanningMode(@PathVariable UUID teamId) {
-        long completedSprints = sprintRepository.countCompletedByTeamId(teamId);
+        accessGuard.requireTeam(teamId);
+long completedSprints = sprintRepository.countCompletedByTeamId(teamId);
         String teamProfile = memoryReader.readTeamProfile(teamId);
         String sprintHistory = memoryReader.readSprintHistory(teamId);
 
@@ -283,9 +294,10 @@ public class SprintPlannerController {
     @GetMapping("/{sprintId}/plan")
     public ResponseEntity<SprintPlan> getSprintPlan(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
+        accessGuard.requireSprint(normalizedSprintId);
         Sprint sprint = sprintRepository.findWithStoriesAndTasksById(normalizedSprintId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
-        
+
         SprintPlan plan = SprintPlanMapper.toSprintPlan(sprint);
         return ResponseEntity.ok(plan);
     }
@@ -293,9 +305,8 @@ public class SprintPlannerController {
     @PostMapping("/{sprintId}/approve")
     public ResponseEntity<String> approveSprint(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
-        Sprint sprint = sprintRepository.findById(normalizedSprintId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
-        
+        Sprint sprint = accessGuard.requireSprint(normalizedSprintId);
+
         sprint.setStatus(Sprint.Status.ACTIVE);
         sprint.setReviewedAt(Instant.now());
         sprintRepository.save(sprint);
@@ -311,10 +322,15 @@ public class SprintPlannerController {
     @Transactional
     public ResponseEntity<String> logEdit(@PathVariable String sprintId, @RequestBody LogEditHttpRequest request) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
+        accessGuard.requireSprint(normalizedSprintId);
 
         UUID taskId = null;
         if (request.entityId() != null) {
             try { taskId = UUID.fromString(request.entityId()); } catch (IllegalArgumentException ignored) {}
+        }
+        if (taskId != null) {
+            // the task must belong to this (already authorised) sprint
+            accessGuard.requireTaskInSprint(taskId, normalizedSprintId);
         }
 
         EditLog log = new EditLog(
@@ -363,6 +379,7 @@ public class SprintPlannerController {
     @GetMapping("/{sprintId}/plan/comparison")
     public ResponseEntity<PlanComparisonResponse> getSprintPlanComparison(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
+        accessGuard.requireSprint(normalizedSprintId);
         Sprint sprint = sprintRepository.findWithStoriesAndTasksById(normalizedSprintId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
 
@@ -442,11 +459,9 @@ public class SprintPlannerController {
                     "Connect your Trello account first. Go to Profile → Connect Trello.");
         }
 
-        Sprint sprint = sprintRepository.findById(normalizedSprintId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found"));
+        Sprint sprint = accessGuard.requireSprint(normalizedSprintId);
 
-        Team team = teamRepository.findById(sprint.getTeamId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Team not found"));
+        Team team = accessGuard.requireTeam(sprint.getTeamId());
 
         if (team.getTrelloBoardId() == null || team.getTrelloBoardId().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -474,8 +489,7 @@ public class SprintPlannerController {
     @GetMapping("/{sprintId}/review")
     public ResponseEntity<SprintReviewSummary> getSprintReview(@PathVariable String sprintId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
-        Sprint sprint = sprintRepository.findById(normalizedSprintId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+        Sprint sprint = accessGuard.requireSprint(normalizedSprintId);
 
         com.sprintplanner.domain.model.SprintReview review = sprint.getSprintReview();
         if (review == null) {
@@ -495,8 +509,7 @@ public class SprintPlannerController {
     @GetMapping("/{sprintId}/retrospective")
     public ResponseEntity<RetrospectiveReport> getRetrospective(@PathVariable String sprintId) {
         UUID normalizedId = normalizeSprintId(sprintId);
-        Sprint sprint = sprintRepository.findById(normalizedId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found"));
+        Sprint sprint = accessGuard.requireSprint(normalizedId);
 
         com.sprintplanner.domain.model.SprintReview review = sprint.getSprintReview();
         if (review == null) {
@@ -514,6 +527,7 @@ public class SprintPlannerController {
             }
         }
 
+        aiUsageLimiter.consume(SecurityUtils.getCurrentUserId(), SecurityUtils.isAdmin(), AiUsageLimiter.WEIGHT_SINGLE);
         // On-demand generation — then cache the result so subsequent calls are instant
         RetrospectiveReport report = retrospectiveService.generateReport(normalizedId);
         try {
@@ -551,11 +565,9 @@ public class SprintPlannerController {
             @PathVariable UUID taskId) {
         UUID normalizedSprintId = normalizeSprintId(sprintId);
 
-        Task task = taskJpaRepository.findById(taskId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Task not found: " + taskId));
-
-        Sprint sprint = sprintRepository.findById(normalizedSprintId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint not found: " + normalizedSprintId));
+        Sprint sprint = accessGuard.requireSprint(normalizedSprintId);
+        Task task = accessGuard.requireTaskInSprint(taskId, normalizedSprintId);
+        aiUsageLimiter.consume(SecurityUtils.getCurrentUserId(), SecurityUtils.isAdmin(), AiUsageLimiter.WEIGHT_SINGLE);
 
         String teamProfileMemory = memoryReader.readTeamProfile(sprint.getTeamId());
         String sprintHistoryMemory = memoryReader.readSprintHistory(sprint.getTeamId());
@@ -700,6 +712,31 @@ public class SprintPlannerController {
             }
         }
         return sb.toString();
+    }
+
+    /** Caps input size so one request cannot burn a huge number of AI tokens. */
+    private void validatePlanInput(PlanSprintHttpRequest request) {
+        if (request.sprintGoal() != null && request.sprintGoal().length() > 1_000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sprint goal is too long (max 1000 characters).");
+        }
+        if (request.epics() != null) {
+            if (request.epics().size() > 15) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many epics (max 15 per sprint).");
+            }
+            for (var epic : request.epics()) {
+                if ((epic.title() != null && epic.title().length() > 300)
+                        || (epic.description() != null && epic.description().length() > 5_000)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "An epic title or description is too long.");
+                }
+            }
+        }
+        if ((request.codebaseContext() != null && request.codebaseContext().length() > 30_000)
+                || (request.previousSprintContext() != null && request.previousSprintContext().length() > 30_000)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Imported context is too long (max 30000 characters).");
+        }
+        if (request.carryoverTasks() != null && request.carryoverTasks().size() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Too many carry-over tasks.");
+        }
     }
 
     private UUID normalizeSprintId(String rawSprintId) {

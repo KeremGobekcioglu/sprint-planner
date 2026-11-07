@@ -3,6 +3,7 @@ package com.sprintplanner.web.auth;
 import com.sprintplanner.domain.model.AppUser;
 import com.sprintplanner.infrastructure.auth.JwtService;
 import com.sprintplanner.infrastructure.persistence.JpaUserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -12,7 +13,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Authentication endpoints for login and registration
@@ -23,22 +26,41 @@ public class AuthController {
     private final JpaUserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final boolean registrationEnabled;
+    private final boolean firstUserIsAdmin;
 
-    public AuthController(JpaUserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+    public AuthController(
+        JpaUserRepository userRepository,
+        PasswordEncoder passwordEncoder,
+        JwtService jwtService,
+        @Value("${app.registration-enabled:true}") boolean registrationEnabled,
+        @Value("${app.first-user-is-admin:true}") boolean firstUserIsAdmin
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
+        this.registrationEnabled = registrationEnabled;
+        this.firstUserIsAdmin = firstUserIsAdmin;
     }
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@RequestBody AuthRequest request) {
-        // Validate input
-        String email = request.email() == null ? null : request.email().trim();
-        if (email == null || email.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email is required");
+        if (!registrationEnabled) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Registration is currently closed");
         }
-        if (request.password() == null || request.password().length() < 6) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 6 characters");
+
+        String email = request.email() == null ? "" : request.email().trim().toLowerCase(Locale.ROOT);
+        if (email.isBlank() || email.length() > 254 || !EMAIL_PATTERN.matcher(email).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A valid email is required");
+        }
+        // bcrypt only uses the first 72 bytes, so cap the length to avoid silent truncation
+        if (request.password() == null || request.password().length() < 8 || request.password().length() > 72) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be between 8 and 72 characters");
+        }
+        if (request.name() != null && request.name().trim().length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name is too long");
         }
 
         // Check email not already taken
@@ -49,7 +71,9 @@ public class AuthController {
         String name = (request.name() == null || request.name().isBlank())
             ? deriveDisplayName(email)
             : request.name().trim();
-        String role = userRepository.count() == 0 ? "ADMIN" : "USER";
+        // In production the admin is created from ADMIN_EMAIL/ADMIN_PASSWORD (AdminBootstrap),
+        // so the first public signup must never become admin.
+        String role = firstUserIsAdmin && userRepository.count() == 0 ? "ADMIN" : "USER";
 
         // Hash password and save user
         UUID userId = UUID.randomUUID();
@@ -64,8 +88,11 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@RequestBody AuthRequest request) {
-        // Find user by email
-        AppUser user = userRepository.findByEmail(request.email())
+        if (request.email() == null || request.password() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        AppUser user = userRepository.findByEmail(email)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
 
         // Verify password
