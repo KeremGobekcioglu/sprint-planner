@@ -2,7 +2,8 @@ import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080',
+  // Dev: talk to the local backend directly. Production build: same origin (the reverse proxy forwards /api).
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8080' : ''),
   headers: { 'Content-Type': 'application/json' },
   timeout: 300000,  // 5 minutes
 });

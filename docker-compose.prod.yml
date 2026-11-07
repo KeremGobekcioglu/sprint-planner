@@ -1,0 +1,67 @@
+# Production stack:  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# (the dev-only compose.yaml is untouched and still used by Spring Boot locally)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-sprintplanner}
+      POSTGRES_USER: ${PGUSER:-sprintplanner}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?set PGPASSWORD in .env.prod}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-sprintplanner} -d ${PGDATABASE:-sprintplanner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # no "ports:" - the database is only reachable from the other containers
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: ${PGDATABASE:-sprintplanner}
+      PGUSER: ${PGUSER:-sprintplanner}
+      PGPASSWORD: ${PGPASSWORD:?set PGPASSWORD in .env.prod}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.prod}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY in .env.prod}
+      CORS_ORIGIN: https://${DOMAIN:?set DOMAIN in .env.prod}
+      TRELLO_API_KEY: ${TRELLO_API_KEY:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-true}
+      AI_PER_USER_HOURLY: ${AI_PER_USER_HOURLY:-16}
+      AI_PER_USER_DAILY: ${AI_PER_USER_DAILY:-40}
+      AI_GLOBAL_DAILY: ${AI_GLOBAL_DAILY:-200}
+    # no "ports:" - only Caddy can reach it, over the internal network
+    mem_limit: 768m
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_TRELLO_API_KEY: ${TRELLO_API_KEY:-}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env.prod}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

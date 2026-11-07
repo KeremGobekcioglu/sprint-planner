@@ -40,3 +40,5 @@ memory/
 noteslatest24may.txt
 testresults.txt
 issues.txt
+# production secrets
+.env.prod

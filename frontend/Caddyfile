@@ -1,0 +1,39 @@
+# {$DOMAIN} comes from the environment (docker-compose.prod.yml).
+# Caddy obtains and renews the Let's Encrypt certificate automatically
+# (needs ports 80 + 443 reachable and the DNS A record pointing at this server).
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# API -> Spring Boot (AI planning can take minutes, hence the long timeout)
+	handle /api/* {
+		request_body {
+			max_size 12MB
+		}
+		reverse_proxy backend:8080 {
+			transport http {
+				response_header_timeout 330s
+			}
+		}
+	}
+
+	# Everything else -> the React SPA (client-side routing falls back to index.html)
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		@html not path /assets/*
+		header @html Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
